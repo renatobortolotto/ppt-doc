@@ -1,0 +1,250 @@
+from __future__ import annotations
+
+import argparse
+import logging
+import warnings
+from pathlib import Path
+
+from PIL import Image
+
+from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE_TYPE
+
+
+def _replace_shape_with_picture(slide, shape, image_path: Path) -> None:
+    left, top, box_w, box_h = shape.left, shape.top, shape.width, shape.height
+
+    # Preserve image aspect ratio: fit inside the box and center.
+    with Image.open(image_path) as img:
+        img_w, img_h = img.size
+
+    if img_w <= 0 or img_h <= 0:
+        new_left, new_top, new_w, new_h = left, top, box_w, box_h
+    else:
+        scale = min(float(box_w) / float(img_w), float(box_h) / float(img_h))
+        new_w = int(round(img_w * scale))
+        new_h = int(round(img_h * scale))
+        new_left = int(round(left + (box_w - new_w) / 2))
+        new_top = int(round(top + (box_h - new_h) / 2))
+
+    slide.shapes.add_picture(str(image_path), new_left, new_top, width=new_w, height=new_h)
+
+    # Remove old shape
+    el = shape._element
+    el.getparent().remove(el)
+
+
+def _get_shape_alt_text(shape) -> str | None:
+    try:
+        cnv = shape._element.xpath('.//p:cNvPr')
+        if cnv:
+            return cnv[0].get('descr')
+    except Exception:
+        return None
+    return None
+
+
+def _replace_picture_image_in_place(slide, picture_shape, image_path: Path) -> None:
+    """Replace a PICTURE's image without changing its geometry/crop.
+
+    Uses python-pptx internals to swap the blip rId to a new image part.
+    """
+    if not image_path.exists():
+        raise FileNotFoundError(f"Imagem não encontrada: {image_path}")
+
+    # Add or reuse image part, then rel to slide, returning rId.
+    image_part, rId = slide.part.get_or_add_image_part(str(image_path))
+
+    # Swap embed reference (keeps extents/crop/position from existing picture).
+    blips = picture_shape._element.xpath('.//a:blip')
+    if not blips:
+        raise ValueError(f"Não achei <a:blip> para substituir na shape {picture_shape.name!r}")
+    blips[0].set(
+        '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed',
+        rId,
+    )
+
+
+def update_presentation(
+    pptx_path: Path,
+    output_path: Path,
+    images_dir: Path,
+    allow_placeholder_text: bool,
+) -> tuple[int, int, list[str], list[str]]:
+    prs = Presentation(str(pptx_path))
+
+    replaced_pictures = 0
+    replaced_placeholders = 0
+    missing_files: list[str] = []
+    replaced_files: list[str] = []
+
+    # 1) Replace pictures already inserted (matched by Alt Text / descr)
+    # 2) Optionally replace text placeholders whose text equals an existing filename
+    for slide in prs.slides:
+        for shape in list(slide.shapes):
+            if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
+                alt = _get_shape_alt_text(shape)
+                if alt:
+                    candidate = images_dir / alt
+                    if candidate.exists():
+                        _replace_picture_image_in_place(slide, shape, candidate)
+                        replaced_pictures += 1
+                        replaced_files.append(alt)
+                    else:
+                        # If alt looks like an image filename, warn later.
+                        if Path(alt).suffix.lower() in {".png", ".jpg", ".jpeg"}:
+                            missing_files.append(alt)
+                continue
+
+            if not getattr(shape, "has_text_frame", False):
+                continue
+            text = (shape.text_frame.text or "").strip()
+            if not text:
+                continue
+            if allow_placeholder_text:
+                candidate = images_dir / text
+                if candidate.exists():
+                    _replace_shape_with_picture(slide, shape, candidate)
+                    replaced_placeholders += 1
+                    replaced_files.append(text)
+                else:
+                    if Path(text).suffix.lower() in {".png", ".jpg", ".jpeg"}:
+                        missing_files.append(text)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    # If input == output, write to a temp file first, then replace.
+    if pptx_path.resolve() == output_path.resolve():
+        tmp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+        prs.save(str(tmp_path))
+        tmp_path.replace(output_path)
+    else:
+        prs.save(str(output_path))
+
+    return replaced_pictures, replaced_placeholders, replaced_files, missing_files
+
+
+def _collect_pictures_alt_text(pptx_path: Path) -> list[str]:
+    prs = Presentation(str(pptx_path))
+    alts: list[str] = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if shape.shape_type != MSO_SHAPE_TYPE.PICTURE:
+                continue
+            alt = _get_shape_alt_text(shape)
+            if alt:
+                alts.append(alt)
+    return alts
+
+
+def _collect_text_placeholders(pptx_path: Path) -> list[str]:
+    prs = Presentation(str(pptx_path))
+    texts: list[str] = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if not getattr(shape, "has_text_frame", False):
+                continue
+            t = (shape.text_frame.text or "").strip()
+            if t:
+                texts.append(t)
+    return texts
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Atualiza um PPTX substituindo imagens existentes pelo Alt Text (descr) \
+apontando para arquivos no diretório de imagens.\n\n"
+            "Regra principal: se a imagem no PPT tiver Alt Text = '01_lucro_trimestres.png', \
+e existir um arquivo com esse nome no diretório de imagens, o script troca a imagem \
+mantendo posição/tamanho/crop."
+        )
+    )
+    parser.add_argument(
+        "--pptx",
+        required=True,
+        help="Caminho do PPTX de entrada (template que será atualizado).",
+    )
+    parser.add_argument(
+        "--out",
+        default=None,
+        help=(
+            "Caminho do PPTX de saída. Se omitido, cria '<entrada>.updated.pptx' ao lado do arquivo de entrada."
+        ),
+    )
+    parser.add_argument(
+        "--images-dir",
+        default=".",
+        help="Diretório onde estão os PNG/JPG a inserir (default: diretório atual).",
+    )
+    parser.add_argument(
+        "--in-place",
+        action="store_true",
+        help="Sobrescreve o arquivo de entrada (cuidado).",
+    )
+    parser.add_argument(
+        "--allow-placeholder-text",
+        action="store_true",
+        help=(
+            "Também substitui caixas de texto cujo texto seja exatamente um nome de arquivo existente (ex: '02_lucro_9m.png')."
+        ),
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    args = _parse_args()
+
+    pptx_path = Path(args.pptx).expanduser().resolve()
+    if not pptx_path.exists():
+        raise FileNotFoundError(f"PPTX não encontrado: {pptx_path}")
+
+    images_dir = Path(args.images_dir).expanduser().resolve()
+    if not images_dir.exists():
+        raise FileNotFoundError(f"Diretório de imagens não encontrado: {images_dir}")
+
+    if args.in_place:
+        output_path = pptx_path
+    else:
+        output_path = (
+            Path(args.out).expanduser().resolve()
+            if args.out
+            else pptx_path.with_name(pptx_path.stem + ".updated" + pptx_path.suffix)
+        )
+
+    logging.info("PPTX: %s", pptx_path)
+    logging.info("Imagens: %s", images_dir)
+    logging.info("Saída: %s", output_path)
+
+    replaced_pictures, replaced_placeholders, replaced_files, missing_files = update_presentation(
+        pptx_path=pptx_path,
+        output_path=output_path,
+        images_dir=images_dir,
+        allow_placeholder_text=bool(args.allow_placeholder_text),
+    )
+
+    logging.info(
+        "Substituições: pictures=%d placeholders=%d",
+        replaced_pictures,
+        replaced_placeholders,
+    )
+
+    if replaced_files:
+        logging.info("Arquivos aplicados (%d): %s", len(replaced_files), sorted(set(replaced_files)))
+
+    # Verification summary
+    alts = _collect_pictures_alt_text(output_path)
+    print(f"OK: gerado {output_path}")
+    print(f"VERIF: pictures={len(alts)} alts={sorted(set(alts))}")
+
+    missing_unique = sorted(set(missing_files))
+    if missing_unique:
+        warnings.warn(
+            "Faltam arquivos no diretório de imagens para alguns Alt Texts / placeholders: "
+            + ", ".join(missing_unique),
+            stacklevel=2,
+        )
+
+
+if __name__ == "__main__":
+    main()

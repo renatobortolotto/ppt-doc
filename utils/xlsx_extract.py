@@ -7,6 +7,19 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
+# openpyxl is used in production to read real XLSX files.
+# In some corporate unit-test environments it may be unavailable; tests can mock
+# the loader and still exercise the extraction logic. For that reason we keep
+# imports optional.
+try:  # pragma: no cover
+    from openpyxl import load_workbook as _openpyxl_load_workbook  # type: ignore
+    from openpyxl.utils.exceptions import InvalidFileException  # type: ignore
+    from openpyxl.utils.cell import range_boundaries as _openpyxl_range_boundaries  # type: ignore
+except Exception:  # pragma: no cover
+    _openpyxl_load_workbook = None
+    InvalidFileException = None
+    _openpyxl_range_boundaries = None
+
 
 @dataclass(frozen=True)
 class ExtractSpec:
@@ -46,6 +59,12 @@ def _range_boundaries(a1_range: str) -> Tuple[int, int, int, int]:
     a1_range = a1_range.strip()
     if not a1_range:
         raise ValueError("Range vazio")
+
+    # Prefer openpyxl's parsing when available.
+    if _openpyxl_range_boundaries is not None:  # pragma: no cover
+        min_col, min_row, max_col, max_row = _openpyxl_range_boundaries(a1_range)
+        return int(min_col), int(min_row), int(max_col), int(max_row)
+
     if ":" not in a1_range:
         row, col = _a1_to_rowcol(a1_range)
         return col, row, col, row
@@ -64,17 +83,19 @@ def _load_workbook(*, filename, data_only: bool = True):
     Kept as a separate function so unit tests can patch it easily.
     """
 
-    try:
-        from openpyxl import load_workbook  # type: ignore
-        from openpyxl.utils.exceptions import InvalidFileException  # type: ignore
-    except ImportError as exc:  # pragma: no cover
-        raise RuntimeError("Dependência 'openpyxl' não instalada") from exc
+    if _openpyxl_load_workbook is None:  # pragma: no cover
+        raise RuntimeError("Dependência 'openpyxl' não instalada")
 
     import zipfile
 
     try:
-        return load_workbook(filename=filename, data_only=data_only)
-    except (InvalidFileException, zipfile.BadZipFile, OSError, ValueError) as exc:
+        return _openpyxl_load_workbook(filename=filename, data_only=data_only)
+    except (zipfile.BadZipFile, OSError, ValueError) as exc:
+        raise ValueError("Arquivo enviado não é um XLSX válido") from exc
+    except Exception as exc:
+        # If openpyxl is present, InvalidFileException is usually thrown for non-xlsx.
+        if InvalidFileException is not None and isinstance(exc, InvalidFileException):  # pragma: no cover
+            raise ValueError("Arquivo enviado não é um XLSX válido") from exc
         raise ValueError("Arquivo enviado não é um XLSX válido") from exc
 
 

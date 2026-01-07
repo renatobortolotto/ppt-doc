@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 from genai_framework.decorators import file_input_route #framework corporativo
@@ -8,6 +9,20 @@ from google.genai import Client, types
 
 from utils.json_utils import coerce_json
 from utils.xlsx_extract import extract_xlsx_bytes_to_dict, parse_specs_json
+
+
+def _resolve_default_specs_path() -> str:
+    """Resolve config/specs.json regardless of where this file lives.
+
+    Works when this module is in repo root or under src/routes/.
+    """
+
+    here = Path(__file__).resolve()
+    for parent in [here.parent, *here.parents]:
+        candidate = parent / "config" / "specs.json"
+        if candidate.exists():
+            return str(candidate)
+    return str(Path("config") / "specs.json")
     
 @file_input_route("analyze_file")
 def analyze_file(file: FileInput):
@@ -93,7 +108,7 @@ def analyze_file(file: FileInput):
           """
     
     try:
-        specs_path = os.getenv("SPECS_JSON_PATH", "specs.json")
+        specs_path = os.getenv("SPECS_JSON_PATH") or _resolve_default_specs_path()
         default_sheet = os.getenv("DEFAULT_SHEET")
 
         specs = parse_specs_json(specs_path)

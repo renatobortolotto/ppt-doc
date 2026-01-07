@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
-
-from openpyxl import load_workbook
-from openpyxl.utils.exceptions import InvalidFileException
-from openpyxl.utils.cell import coordinate_to_tuple, range_boundaries
-import zipfile
 
 
 @dataclass(frozen=True)
@@ -22,17 +18,72 @@ class ExtractSpec:
     sheet: Optional[str] = None
 
 
+_A1_CELL_RE = re.compile(r"^\$?([A-Za-z]+)\$?(\d+)$")
+
+
+def _col_letters_to_index(letters: str) -> int:
+    letters = letters.strip().upper()
+    if not letters.isalpha():
+        raise ValueError(f"Coluna inválida: {letters!r}")
+    col = 0
+    for ch in letters:
+        col = col * 26 + (ord(ch) - ord("A") + 1)
+    return col
+
+
+def _a1_to_rowcol(a1: str) -> Tuple[int, int]:
+    a1 = a1.strip()
+    m = _A1_CELL_RE.match(a1)
+    if not m:
+        raise ValueError(f"Célula A1 inválida: {a1!r}")
+    col_letters, row_s = m.groups()
+    row = int(row_s)
+    col = _col_letters_to_index(col_letters)
+    return row, col
+
+
+def _range_boundaries(a1_range: str) -> Tuple[int, int, int, int]:
+    a1_range = a1_range.strip()
+    if not a1_range:
+        raise ValueError("Range vazio")
+    if ":" not in a1_range:
+        row, col = _a1_to_rowcol(a1_range)
+        return col, row, col, row
+
+    left, right = [p.strip() for p in a1_range.split(":", 1)]
+    row1, col1 = _a1_to_rowcol(left)
+    row2, col2 = _a1_to_rowcol(right)
+    min_col, max_col = sorted((col1, col2))
+    min_row, max_row = sorted((row1, row2))
+    return min_col, min_row, max_col, max_row
+
+
+def _load_workbook(*, filename, data_only: bool = True):
+    """Load an XLSX workbook using openpyxl.
+
+    Kept as a separate function so unit tests can patch it easily.
+    """
+
+    try:
+        from openpyxl import load_workbook  # type: ignore
+        from openpyxl.utils.exceptions import InvalidFileException  # type: ignore
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError("Dependência 'openpyxl' não instalada") from exc
+
+    import zipfile
+
+    try:
+        return load_workbook(filename=filename, data_only=data_only)
+    except (InvalidFileException, zipfile.BadZipFile, OSError, ValueError) as exc:
+        raise ValueError("Arquivo enviado não é um XLSX válido") from exc
+
+
 def _read_range_2d(ws, a1_range: str) -> List[List[Any]]:
     a1_range = a1_range.strip()
     if not a1_range:
         raise ValueError("Range vazio")
 
-    if ":" in a1_range:
-        min_col, min_row, max_col, max_row = range_boundaries(a1_range)
-    else:
-        row, col = coordinate_to_tuple(a1_range)
-        min_col = max_col = col
-        min_row = max_row = row
+    min_col, min_row, max_col, max_row = _range_boundaries(a1_range)
 
     out: List[List[Any]] = []
     for r in range(min_row, max_row + 1):
@@ -146,10 +197,7 @@ def extract_xlsx_to_dict(
     if not xlsx_path.exists():
         raise FileNotFoundError(f"XLSX não encontrado: {xlsx_path}")
 
-    try:
-        wb = load_workbook(filename=xlsx_path, data_only=True)
-    except (InvalidFileException, zipfile.BadZipFile, OSError, ValueError) as exc:
-        raise ValueError("Arquivo enviado não é um XLSX válido") from exc
+    wb = _load_workbook(filename=xlsx_path, data_only=True)
 
     return extract_workbook_to_dict(
         wb,
@@ -174,10 +222,8 @@ def extract_xlsx_bytes_to_dict(
         raise ValueError("XLSX vazio")
 
     bio = BytesIO(xlsx_bytes)
-    try:
-        wb = load_workbook(filename=bio, data_only=True)
-    except (InvalidFileException, zipfile.BadZipFile, OSError, ValueError) as exc:
-        raise ValueError("Arquivo enviado não é um XLSX válido") from exc
+
+    wb = _load_workbook(filename=bio, data_only=True)
 
     return extract_workbook_to_dict(
         wb,

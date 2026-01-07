@@ -1,10 +1,8 @@
 import json
 import tempfile
 import unittest
-from io import BytesIO
 from pathlib import Path
-
-from openpyxl import Workbook
+from unittest.mock import patch
 
 from utils.xlsx_extract import (
     ExtractSpec,
@@ -15,26 +13,43 @@ from utils.xlsx_extract import (
 )
 
 
-def _make_workbook_bytes() -> bytes:
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "DRE Saida"
+class _FakeCell:
+    def __init__(self, value):
+        self.value = value
 
-    # Labels row
-    ws["C3"].value = "3T25"
-    ws["D3"].value = "4T25"
 
-    # Values row
-    ws["C18"].value = 461
-    ws["D18"].value = 500
+class _FakeWorksheet:
+    def __init__(self, values_by_rowcol):
+        self._values_by_rowcol = dict(values_by_rowcol)
 
-    # Single cell cases
-    ws["B2"].value = "ONLY_LABEL"
-    ws["B5"].value = 123.45
+    def cell(self, row: int, column: int):
+        return _FakeCell(self._values_by_rowcol.get((row, column)))
 
-    bio = BytesIO()
-    wb.save(bio)
-    return bio.getvalue()
+
+class _FakeWorkbook:
+    def __init__(self, sheets):
+        self._sheets = dict(sheets)
+        self.sheetnames = list(self._sheets.keys())
+
+    def __getitem__(self, item):
+        return self._sheets[item]
+
+
+def _fake_workbook() -> _FakeWorkbook:
+    # Coordinates are (row, col)
+    values = {
+        # Labels C3:D3  (C=3, D=4)
+        (3, 3): "3T25",
+        (3, 4): "4T25",
+        # Values C18:D18
+        (18, 3): 461,
+        (18, 4): 500,
+        # Single cell cases
+        (2, 2): "ONLY_LABEL",  # B2
+        (5, 2): 123.45,  # B5
+    }
+    ws = _FakeWorksheet(values)
+    return _FakeWorkbook({"DRE Saida": ws})
 
 
 class TestXlsxExtract(unittest.TestCase):
@@ -92,7 +107,6 @@ class TestXlsxExtract(unittest.TestCase):
         self.assertEqual(parsed[0].sheet, "DRE Saida")
 
     def test_extract_xlsx_bytes_to_dict_basic(self):
-        xlsx_bytes = _make_workbook_bytes()
         specs = [
             ExtractSpec(
                 id="lucroTrimestre",
@@ -102,14 +116,15 @@ class TestXlsxExtract(unittest.TestCase):
             )
         ]
 
-        out = extract_xlsx_bytes_to_dict(xlsx_bytes, specs, include_meta=True)
+        with patch("utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
+            out = extract_xlsx_bytes_to_dict(b"any", specs, include_meta=True)
+
         self.assertIn("lucroTrimestre", out)
         self.assertEqual(out["lucroTrimestre"]["Labels"], ["3T25", "4T25"])
         self.assertEqual(out["lucroTrimestre"]["Values"], [461.0, 500.0])
         self.assertEqual(out["lucroTrimestre"]["Sheet"], "DRE Saida")
 
     def test_extract_xlsx_bytes_to_dict_lowercase_fields(self):
-        xlsx_bytes = _make_workbook_bytes()
         specs = [
             ExtractSpec(
                 id="lucroTrimestre",
@@ -119,12 +134,14 @@ class TestXlsxExtract(unittest.TestCase):
             )
         ]
 
-        out = extract_xlsx_bytes_to_dict(
-            xlsx_bytes,
-            specs,
-            include_meta=True,
-            lowercase_fields=True,
-        )
+        with patch("utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
+            out = extract_xlsx_bytes_to_dict(
+                b"any",
+                specs,
+                include_meta=True,
+                lowercase_fields=True,
+            )
+
         self.assertEqual(out["lucroTrimestre"]["labels"], ["3T25", "4T25"])
         self.assertEqual(out["lucroTrimestre"]["values"], [461.0, 500.0])
         self.assertEqual(out["lucroTrimestre"]["sheet"], "DRE Saida")
@@ -135,7 +152,6 @@ class TestXlsxExtract(unittest.TestCase):
             extract_xlsx_bytes_to_dict(b"", [ExtractSpec("x", "A1", "A1", sheet="S")])
 
     def test_extract_xlsx_bytes_to_dict_raises_on_invalid_xlsx(self):
-        bad = b"not an xlsx"
         specs = [
             ExtractSpec(
                 id="x",
@@ -145,13 +161,16 @@ class TestXlsxExtract(unittest.TestCase):
             )
         ]
         with self.assertRaises(ValueError):
-            extract_xlsx_bytes_to_dict(bad, specs)
+            with patch(
+                "utils.xlsx_extract._load_workbook",
+                side_effect=ValueError("Arquivo enviado não é um XLSX válido"),
+            ):
+                extract_xlsx_bytes_to_dict(b"bad", specs)
 
     def test_extract_xlsx_to_dict_from_path(self):
-        xlsx_bytes = _make_workbook_bytes()
         with tempfile.TemporaryDirectory() as td:
             xlsx_path = Path(td) / "file.xlsx"
-            xlsx_path.write_bytes(xlsx_bytes)
+            xlsx_path.write_bytes(b"placeholder")
 
             specs = [
                 ExtractSpec(
@@ -162,7 +181,8 @@ class TestXlsxExtract(unittest.TestCase):
                 )
             ]
 
-            out = extract_xlsx_to_dict(xlsx_path, specs, include_meta=False)
+            with patch("utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
+                out = extract_xlsx_to_dict(xlsx_path, specs, include_meta=False)
 
         self.assertEqual(out["single"]["Labels"], ["ONLY_LABEL"])
         self.assertEqual(out["single"]["Values"], [123.45])

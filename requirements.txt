@@ -1,0 +1,11 @@
+# Core (gráficos + Excel)
+matplotlib
+numpy
+openpyxl
+
+# PowerPoint update
+python-pptx
+Pillow
+
+# Notebook/kernel (para rodar o .ipynb via Jupyter)
+ipykernel

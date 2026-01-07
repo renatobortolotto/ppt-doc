@@ -134,6 +134,19 @@ class TestXlsxExtract(unittest.TestCase):
         with self.assertRaises(ValueError):
             extract_xlsx_bytes_to_dict(b"", [ExtractSpec("x", "A1", "A1", sheet="S")])
 
+    def test_extract_xlsx_bytes_to_dict_raises_on_invalid_xlsx(self):
+        bad = b"not an xlsx"
+        specs = [
+            ExtractSpec(
+                id="x",
+                sheet="DRE Saida",
+                labels_range="A1",
+                values_range="A1",
+            )
+        ]
+        with self.assertRaises(ValueError):
+            extract_xlsx_bytes_to_dict(bad, specs)
+
     def test_extract_xlsx_to_dict_from_path(self):
         xlsx_bytes = _make_workbook_bytes()
         with tempfile.TemporaryDirectory() as td:

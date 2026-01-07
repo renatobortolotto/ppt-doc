@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 from openpyxl.utils.cell import coordinate_to_tuple, range_boundaries
+import zipfile
 
 
 @dataclass(frozen=True)
@@ -144,7 +146,11 @@ def extract_xlsx_to_dict(
     if not xlsx_path.exists():
         raise FileNotFoundError(f"XLSX não encontrado: {xlsx_path}")
 
-    wb = load_workbook(filename=xlsx_path, data_only=True)
+    try:
+        wb = load_workbook(filename=xlsx_path, data_only=True)
+    except (InvalidFileException, zipfile.BadZipFile, OSError, ValueError) as exc:
+        raise ValueError("Arquivo enviado não é um XLSX válido") from exc
+
     return extract_workbook_to_dict(
         wb,
         specs,
@@ -168,7 +174,11 @@ def extract_xlsx_bytes_to_dict(
         raise ValueError("XLSX vazio")
 
     bio = BytesIO(xlsx_bytes)
-    wb = load_workbook(filename=bio, data_only=True)
+    try:
+        wb = load_workbook(filename=bio, data_only=True)
+    except (InvalidFileException, zipfile.BadZipFile, OSError, ValueError) as exc:
+        raise ValueError("Arquivo enviado não é um XLSX válido") from exc
+
     return extract_workbook_to_dict(
         wb,
         specs,

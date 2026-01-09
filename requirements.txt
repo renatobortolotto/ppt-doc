@@ -9,3 +9,6 @@ Pillow
 
 # Notebook/kernel (para rodar o .ipynb via Jupyter)
 ipykernel
+
+# HTTP client (para chamar FastAPI no job fixo)
+requests

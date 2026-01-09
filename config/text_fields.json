@@ -1,0 +1,24 @@
+{
+  "default_sheet": "DRE Saida",
+  "llm_fields": [
+    "slide1_title",
+    "slide1_subtitle"
+  ],
+  "fields": {
+    "ROE_RECORRENTE": "K20",
+    "LL_RECORRENTE": "K18",
+    "testing": "b35",
+    "text2": "b36",
+    "NIM1": {"sheet": "Margem Financeira", "cell": "W9"},
+    "NIM2": {"sheet": "Margem Financeira", "cell": "X9"},
+    "NIM3": {"sheet": "Margem Financeira", "cell": "Y9"},
+    "NIM4": {"sheet": "Margem Financeira", "cell": "Z9"},
+    "NIM5": {"sheet": "Margem Financeira", "cell": "AA9"},
+    "NIM6": {"sheet": "Margem Financeira", "cell": "AB9"},
+    "NIM7": {"sheet": "Margem Financeira", "cell": "AC9"},
+    "NIM8": {"sheet": "Margem Financeira", "cell": "AD9"},
+    "NIM9": {"sheet": "Margem Financeira", "cell": "AE9"},
+    "NIM10": {"sheet": "Margem Financeira", "cell": "AJ9"},
+    "NIM11": {"sheet": "Margem Financeira", "cell": "AK9"}
+  }
+}

@@ -78,6 +78,14 @@ target/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# PowerPoint outputs / Office temp files
+*.updated*.pptx
+~$*
+
+# Local run outputs
+text_from_xlsx.json
+llm_response.latest.json
+
 # IPython
 profile_default/
 ipython_config.py

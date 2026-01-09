@@ -8,7 +8,6 @@ Além disso, inclui um fluxo de **extração de dados de um XLSX para JSON** (ba
 
 - `test-ppt.ipynb`: gera os PNGs dos gráficos a partir do `testing.xlsx`.
 - `update_ppt.py`: atualiza o PowerPoint trocando as imagens **em lugar** (sem distorcer e sem mexer na geometria).
-- `extract_xlsx_to_json.py`: CLI para extrair ranges do Excel e imprimir/salvar JSON.
 - `specs.example.json`: exemplo de specs para extração.
 - `main-framework.py`: exemplo de “chassi” de API corporativa (recebe XLSX, extrai JSON, chama Gemini e retorna JSON).
 - `utils/`: utilitários reutilizáveis (extração XLSX e parsing robusto de JSON retornado pelo LLM).
@@ -83,21 +82,6 @@ Formato típico produzido (com `lowercase_fields=True`):
 6) **A API retorna JSON**
 - Se o parse falhar, retorna um JSON de erro com `model_response` para debug.
 
-## Rodando a extração (CLI)
-
-Extrair via `config/specs.json`:
-
-```bash
-cd /home/renato/ppt-doc
-./.venv/bin/python extract_xlsx_to_json.py --xlsx testing.xlsx --specs-json config/specs.json --include-meta --lowercase-fields
-```
-
-Salvar em arquivo:
-
-```bash
-./.venv/bin/python extract_xlsx_to_json.py --xlsx testing.xlsx --specs-json config/specs.json --out saida.json --include-meta --lowercase-fields
-```
-
 ## Rodando o exemplo de API (main-framework)
 
 O `main-framework.py` é um exemplo para o seu chassi corporativo. Ele usa:
@@ -117,6 +101,83 @@ Rodar:
 ```bash
 cd /home/renato/ppt-doc
 ./.venv/bin/python -m unittest discover -s tests -v
+```
+
+## Preencher título/subtítulo no PowerPoint (texto)
+
+Para preencher o título e subtítulo do slide a partir do JSON retornado pelo endpoint `analyze_file`, use o `update_ppt.py` com `--text-json`.
+
+### Como preparar o template PPT
+
+No PowerPoint, no shape do título/subtítulo, coloque um placeholder de texto como:
+
+- `{{slide1_title}}`
+- `{{slide1_subtitle}}`
+
+Recomendação: deixe cada placeholder como um token contínuo (evite quebrar o token com estilos diferentes), para preservar a formatação.
+
+Alternativa: em vez de token no texto, você pode setar o **Alt Text** do shape como `slide1_title` / `slide1_subtitle`.
+
+### Como rodar
+
+Se você salvou a resposta do LLM em um arquivo JSON (por exemplo `llm_response.json`), rode:
+
+```bash
+python update_ppt.py --pptx /caminho/para/seu.pptx --images-dir /caminho/para/as/imagens --text-json llm_response.json
+```
+
+O `--text-json` aceita tanto o formato direto do modelo:
+
+```json
+{"titles": {"slide1_title": "..."}, "subtitles": {"slide1_subtitle": "..."}}
+```
+
+quanto o wrapper do endpoint:
+
+```json
+{"response": {"titles": {"slide1_title": "..."}, "subtitles": {"slide1_subtitle": "..."}}}
+```
+
+## Job fixo (só passa o XLSX)
+
+Se essa aplicação vai ser “fixa” e você não quer passar um monte de argumentos no job, use o runner [run_fixed_job.py](run_fixed_job.py).
+
+Você edita **uma vez só**:
+
+- [config/job_config.json](config/job_config.json): template do PPT, saída, images dir
+- [config/text_fields.json](config/text_fields.json): mapeamento `TOKEN -> célula A1` (e `default_sheet`)
+
+### Job 100% automático (XLSX → API/LLM → PPT)
+
+Se você quer que o job receba o XLSX e já dispare automaticamente:
+
+1) upload do XLSX para a FastAPI do ambiente corporativo (`analyze_file`)
+2) receba o JSON `{ "response": ... }`
+3) preencha os textos no PPT
+
+Configure em [config/job_config.json](config/job_config.json):
+
+- `api_url`: URL completa do endpoint (ex.: `https://SEU_HOST/analyze_file`)
+- `api_file_field`: nome do campo do upload (default: `file`)
+- `api_headers`: headers (ex.: `{"Authorization": "Bearer ..."}`)
+- `llm_response_json`: onde salvar a resposta (default: `llm_response.latest.json`)
+
+### Campos vindos do JSON do LLM
+
+Se alguns placeholders devem vir do JSON retornado pela LLM (em vez do Excel), configure:
+
+- Em [config/job_config.json](config/job_config.json): `llm_response_json` (caminho do arquivo JSON do LLM/endpoint)
+- Em [config/text_fields.json](config/text_fields.json): `llm_fields` (lista de chaves que devem ser preenchidas a partir desse JSON)
+
+O runner carrega o JSON, extrai um mapping `chave -> texto` (suporta `{response:{...}}`), filtra só as chaves em `llm_fields` e aplica no PPT.
+
+Regra de merge: se a mesma chave existir no XLSX e no LLM, o valor do LLM vence.
+
+Depois, no job você passa apenas o XLSX:
+
+```bash
+cd /home/renato/ppt-doc
+./.venv/bin/python run_fixed_job.py --xlsx /caminho/para/arquivo.xlsx
 ```
 
 ## Como funciona o `update_ppt.py`

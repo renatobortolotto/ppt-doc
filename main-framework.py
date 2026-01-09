@@ -18,10 +18,19 @@ def _resolve_default_specs_path() -> str:
     """
 
     here = Path(__file__).resolve()
+
+    # 1) Prefer a specs.json next to this route/module (common in corporate chassis).
+    local_specs = here.parent / "specs.json"
+    if local_specs.exists():
+        return str(local_specs)
+
+    # 2) Otherwise, look for config/specs.json walking up.
     for parent in [here.parent, *here.parents]:
         candidate = parent / "config" / "specs.json"
         if candidate.exists():
             return str(candidate)
+
+    # 3) Final fallback: relative to current working directory.
     return str(Path("config") / "specs.json")
     
 @file_input_route("analyze_file")
@@ -124,6 +133,7 @@ def analyze_file(file: FileInput):
         return {
             "error": "Falha ao extrair dados do XLSX usando specs.json.",
             "details": str(exc),
+            "specsPath": os.getenv("SPECS_JSON_PATH") or _resolve_default_specs_path(),
         }
     
     prompt = f"{INSTRUCTIONS}\n\nDados extraídos:\n{texto}"

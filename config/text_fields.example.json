@@ -1,0 +1,8 @@
+{
+  "default_sheet": "DRE Saida",
+  "fields": {
+    "ROE_RECORRENTE": "K20",
+    "LUCRO_RECORRENTE": "C18",
+    "TAXA_DESCONTO": {"sheet": "Premissas", "cell": "B2"}
+  }
+}

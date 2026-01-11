@@ -2,7 +2,9 @@
   "default_sheet": "DRE Saida",
   "llm_fields": [
     "slide1_title",
-    "slide1_subtitle"
+    "slide1_subtitle",
+    "slide2_title",
+    "slide2_subtitle"
   ],
   "fields": {
     "ROE_RECORRENTE": "K20",

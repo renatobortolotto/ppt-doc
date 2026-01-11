@@ -1,6 +1,6 @@
 {
   "pptx_template": "teste-design.gerado.updated.pptx",
-  "pptx_output": "teste-design.gerado.updated.fixedjob.pptx",
+  "pptx_output": "main_testing.pptx",
   "images_dir": ".",
   "allow_placeholder_text": false,
   "text_fields_config": "config/text_fields.json",

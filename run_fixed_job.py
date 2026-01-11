@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Dict
 
 from update_ppt import _flatten_text_payload, update_presentation
+from utils.slide1_charts import generate_slide1_charts
+from utils.slide2_charts import generate_slide2_charts
 from utils.xlsx_text_fields import extract_xlsx_to_text_mapping, parse_text_fields_json
 
 
@@ -36,7 +38,8 @@ def _load_llm_mapping(repo_root: Path, cfg: Dict[str, Any]) -> Dict[str, str]:
 
     path = _resolve_path(repo_root, str(llm_path))
     if not path.exists():
-        raise FileNotFoundError(f"LLM response JSON não encontrado: {path}")
+        logging.warning("LLM response JSON não encontrado (ignorando): %s", str(path))
+        return {}
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(payload, dict) and "response" in payload and isinstance(payload["response"], dict):
@@ -122,6 +125,11 @@ def main() -> None:
         )
     )
     parser.add_argument("--xlsx", required=True, help="Caminho do XLSX de entrada")
+    parser.add_argument(
+        "--skip-charts",
+        action="store_true",
+        help="Não gera os PNGs (01..07) antes de atualizar o PPT.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent
@@ -138,6 +146,16 @@ def main() -> None:
     pptx_output = _resolve_path(repo_root, str(cfg.get("pptx_output")))
     images_dir = _resolve_path(repo_root, str(cfg.get("images_dir", ".")))
     allow_placeholder_text = bool(cfg.get("allow_placeholder_text", False))
+
+    # Gera os gráficos (por slide) antes de atualizar o PPT.
+    if not bool(args.skip_charts):
+        logging.info("Gerando PNGs do slide 1 (01..04)...")
+        s1 = generate_slide1_charts(xlsx_path=xlsx_path, output_dir=images_dir)
+        logging.info("OK: slide 1 gerou %d arquivos", len(s1))
+
+        logging.info("Gerando PNGs do slide 2 (05..07)...")
+        s2 = generate_slide2_charts(xlsx_path=xlsx_path, output_dir=images_dir)
+        logging.info("OK: slide 2 gerou %d arquivos", len(s2))
 
     text_fields_config = _resolve_path(repo_root, str(cfg.get("text_fields_config", "config/text_fields.json")))
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import warnings
 from pathlib import Path
 
@@ -78,6 +79,23 @@ def _flatten_text_payload(payload: object) -> dict[str, str]:
     We also accept top-level keys directly.
     """
 
+    def _camel_to_snake(key: str) -> str:
+        # slide1Title -> slide1_title ; Slide1Title -> slide1_title
+        s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", key)
+        s2 = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1)
+        return s2.replace("__", "_").lower()
+
+    def _add(mapping: dict[str, str], key: str, value: object) -> None:
+        if value is None:
+            return
+        text = str(value)
+        mapping[key] = text
+
+        snake = _camel_to_snake(key)
+        # Only add the snake_case alias if it differs and doesn't already exist.
+        if snake != key and snake not in mapping:
+            mapping[snake] = text
+
     mapping: dict[str, str] = {}
     if not isinstance(payload, dict):
         return mapping
@@ -86,16 +104,14 @@ def _flatten_text_payload(payload: object) -> dict[str, str]:
         section = payload.get(section_key)
         if isinstance(section, dict):
             for k, v in section.items():
-                if v is None:
-                    continue
-                mapping[str(k)] = str(v)
+                _add(mapping, str(k), v)
 
     # Also accept any top-level string keys (optional)
     for k, v in payload.items():
         if k in ("titles", "subtitles"):
             continue
         if isinstance(v, str):
-            mapping[str(k)] = v
+            _add(mapping, str(k), v)
 
     return mapping
 

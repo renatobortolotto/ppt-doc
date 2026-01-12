@@ -248,9 +248,18 @@ def main() -> None:
             llm_fields = [str(x) for x in lf]
 
     llm_mapping = _load_llm_mapping(repo_root, cfg)
+    llm_keys_before_filter = set(llm_mapping.keys())
     if llm_fields:
         allowed = set(llm_fields)
         llm_mapping = {k: v for k, v in llm_mapping.items() if k in allowed}
+        if llm_keys_before_filter and not llm_mapping:
+            sample_keys = ", ".join(sorted(list(llm_keys_before_filter))[:25])
+            logging.warning(
+                "Chaves vindas da LLM foram ignoradas por não baterem com llm_fields. "
+                "llm_fields=%s; chaves_disponiveis(amostra)=%s",
+                sorted(list(allowed)),
+                sample_keys,
+            )
 
     # LLM overrides XLSX for same keys
     text_mapping.update(llm_mapping)

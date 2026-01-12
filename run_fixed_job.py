@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -10,6 +12,61 @@ from update_ppt import _flatten_text_payload, update_presentation
 from utils.slide1_charts import generate_slide1_charts
 from utils.slide2_charts import generate_slide2_charts
 from utils.xlsx_text_fields import extract_xlsx_to_text_mapping, parse_text_fields_json
+
+
+def _add_handler_if_missing(logger: logging.Logger, handler: logging.Handler) -> None:
+    handler_type = type(handler)
+    for existing in logger.handlers:
+        if isinstance(existing, handler_type):
+            return
+    logger.addHandler(handler)
+
+
+def _configure_logging(level: str, *, log_file: str | None = None) -> None:
+    """Configure logging reliably even if the host already configured handlers.
+
+    In some corporate runtimes, `logging.basicConfig()` becomes a no-op because a handler
+    already exists. This function ensures we always have a stream handler and level set.
+    """
+
+    numeric = getattr(logging, level.upper(), None)
+    if not isinstance(numeric, int):
+        numeric = logging.INFO
+
+    root = logging.getLogger()
+    fmt = logging.Formatter("%(levelname)s: %(message)s")
+
+    # Python 3.8+: use force=True to override hostile pre-configured handlers.
+    try:
+        handlers: list[logging.Handler] = [logging.StreamHandler(stream=sys.stderr)]
+        handlers[0].setFormatter(fmt)
+
+        if log_file:
+            log_path = Path(log_file).expanduser().resolve()
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(log_path, encoding="utf-8")
+            file_handler.setFormatter(fmt)
+            handlers.append(file_handler)
+
+        logging.basicConfig(level=numeric, handlers=handlers, force=True)
+    except TypeError:
+        # Older Python: no force= parameter.
+        root.setLevel(numeric)
+
+        stream_handler = logging.StreamHandler(stream=sys.stderr)
+        stream_handler.setFormatter(fmt)
+        _add_handler_if_missing(root, stream_handler)
+
+        if log_file:
+            log_path = Path(log_file).expanduser().resolve()
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            file_handler = logging.FileHandler(log_path, encoding="utf-8")
+            file_handler.setFormatter(fmt)
+            _add_handler_if_missing(root, file_handler)
+
+    # Third-party libraries can be extremely noisy at DEBUG.
+    logging.getLogger("matplotlib").setLevel(logging.WARNING)
+    logging.getLogger("PIL").setLevel(logging.WARNING)
 
 
 def _resolve_path(repo_root: Path, p: str) -> Path:
@@ -116,8 +173,6 @@ def _maybe_fetch_llm_response(repo_root: Path, cfg: Dict[str, Any], xlsx_path: P
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
     parser = argparse.ArgumentParser(
         description=(
             "Job fixo: recebe apenas o XLSX e atualiza o PPT usando configs em config/*.json.\n\n"
@@ -126,11 +181,28 @@ def main() -> None:
     )
     parser.add_argument("--xlsx", required=True, help="Caminho do XLSX de entrada")
     parser.add_argument(
+        "--log-level",
+        default="INFO",
+        help="Nível de log (DEBUG, INFO, WARNING, ERROR). Default: INFO",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help=(
+            "Opcional: caminho para gravar logs em arquivo (útil em ambientes corporativos que escondem stdout/stderr). "
+            "Também pode ser definido via env PPTDOC_LOG_FILE."
+        ),
+    )
+    parser.add_argument(
         "--skip-charts",
         action="store_true",
         help="Não gera os PNGs (01..07) antes de atualizar o PPT.",
     )
     args = parser.parse_args()
+
+    log_file = args.log_file or os.environ.get("PPTDOC_LOG_FILE")
+    _configure_logging(str(args.log_level), log_file=log_file)
+    logging.info("Logging inicializado (level=%s)%s", str(args.log_level).upper(), f" file={log_file}" if log_file else "")
 
     repo_root = Path(__file__).resolve().parent
     cfg = _load_job_config(repo_root)

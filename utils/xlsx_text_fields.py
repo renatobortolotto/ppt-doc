@@ -141,4 +141,38 @@ def extract_xlsx_to_text_mapping(
         raise FileNotFoundError(f"XLSX não encontrado: {xlsx_path}")
 
     wb = xlsx_extract._load_workbook(filename=xlsx_path, data_only=True)
-    return extract_workbook_text_mapping(wb, specs, default_sheet=default_sheet)
+    out = extract_workbook_text_mapping(wb, specs, default_sheet=default_sheet)
+
+    # Excel formulas: openpyxl does not calculate formulas.
+    # If the file was not saved with cached results, data_only=True may return None.
+    # For VAR_* fields (quarter deltas), try a fallback read from data_only=False and
+    # use the cached value if present.
+    var_specs = [s for s in specs if str(s.id).upper().startswith("VAR_")]
+    if var_specs and any(out.get(s.id, "") == "" for s in var_specs):
+        wb_formula = xlsx_extract._load_workbook(filename=xlsx_path, data_only=False)
+        for spec in var_specs:
+            if out.get(spec.id, "") != "":
+                continue
+
+            sheet_name = spec.sheet or default_sheet
+            if not sheet_name or sheet_name not in wb_formula.sheetnames:
+                continue
+
+            # Only attempt for single-cell references.
+            try:
+                min_col, min_row, max_col, max_row = xlsx_extract._range_boundaries(spec.a1_range)
+            except Exception:
+                continue
+            if min_col != max_col or min_row != max_row:
+                continue
+
+            ws = wb_formula[sheet_name]
+            v = ws.cell(row=min_row, column=min_col).value
+            if v is None:
+                continue
+            # If it's a formula string, we can't evaluate here.
+            if isinstance(v, str) and v.strip().startswith("="):
+                continue
+            out[spec.id] = _coerce_cell_value_to_str(v)
+
+    return out

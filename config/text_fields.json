@@ -21,6 +21,9 @@
     "NIM8": {"sheet": "Margem Financeira", "cell": "AD9"},
     "NIM9": {"sheet": "Margem Financeira", "cell": "AE9"},
     "NIM10": {"sheet": "Margem Financeira", "cell": "AJ9"},
-    "NIM11": {"sheet": "Margem Financeira", "cell": "AK9"}
+    "NIM11": {"sheet": "Margem Financeira", "cell": "AK9"},
+    "VAR_DEMAIS": {"sheet": "Emprestimos", "cell": "G10"},
+    "VAR_EGV": {"sheet": "Emprestimos", "cell": "G8"},
+    "VAR_PSOL": {"sheet": "Emprestimos", "cell": "G6"}
   }
 }

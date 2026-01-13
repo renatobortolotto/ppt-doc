@@ -10,6 +10,7 @@ from pathlib import Path
 from PIL import Image
 
 from pptx import Presentation
+from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 
 
@@ -119,6 +120,224 @@ def _flatten_text_payload(payload: object) -> dict[str, str]:
 def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
     """Replace text placeholders inside a shape. Returns number of replacements."""
 
+    def _is_var_field(key: str) -> bool:
+        return bool(key) and str(key).upper().startswith("VAR_")
+
+    def _parse_float_loose(text: str) -> float | None:
+        if text is None:
+            return None
+        s = str(text).strip()
+        if not s:
+            return None
+        # Common cases: "-1,2%", "+0.5%", "0.03".
+        s = s.replace("%", "")
+        s = s.replace(" ", "")
+        # Keep only characters relevant for a float.
+        s = re.sub(r"[^0-9eE+\-\.,]", "", s)
+        # Prefer comma as decimal separator.
+        if s.count(",") == 1 and s.count(".") == 0:
+            s = s.replace(",", ".")
+        # If both separators appear, assume dot is thousands and comma is decimal.
+        if "," in s and "." in s:
+            s = s.replace(".", "")
+            s = s.replace(",", ".")
+        try:
+            return float(s)
+        except Exception:
+            return None
+
+    def _format_var_indicator_parts(raw: str) -> tuple[str, str, RGBColor] | None:
+        val = _parse_float_loose(raw)
+        if val is None:
+            return None
+
+        # Decide if the source is already a percentage.
+        raw_s = str(raw).strip()
+        has_percent = "%" in raw_s
+
+        eps = 1e-9
+        if abs(val) <= eps:
+            glyph = "●"
+            color = RGBColor(0x7F, 0x7F, 0x7F)  # gray
+            mag = 0.0
+        elif val > 0:
+            glyph = "▲"
+            color = RGBColor(0x00, 0xB0, 0x50)  # green
+            mag = abs(val)
+        else:
+            glyph = "▼"
+            color = RGBColor(0xC0, 0x00, 0x00)  # red
+            mag = abs(val)
+
+        if has_percent:
+            # Preserve user's/Excel's formatted magnitude as much as possible.
+            # Just remove sign characters.
+            cleaned = raw_s
+            cleaned = cleaned.replace("+", "")
+            cleaned = cleaned.replace("-", "")
+            cleaned = cleaned.strip()
+            return glyph, cleaned, color
+
+        # If the cell is a fraction (0.0123), treat as percent.
+        if abs(mag) <= 1.0:
+            mag_pct = mag * 100.0
+        else:
+            mag_pct = mag
+
+        # 1 decimal is a good default for quarter deltas.
+        mag_txt = f"{mag_pct:.1f}%".replace(".", ",")
+        return glyph, mag_txt, color
+
+    def _set_shape_text_with_var(*, raw: str) -> bool:
+        """Set shape text to 'glyph value' with only glyph colored.
+
+        Returns True if it applied VAR formatting, False otherwise.
+        """
+
+        formatted = _format_var_indicator_parts(raw)
+        if formatted is None:
+            return False
+        glyph, mag_txt, rgb = formatted
+
+        # Capture the current styling so we don't lose template formatting.
+        style_src = None
+        try:
+            p0 = shape.text_frame.paragraphs[0]
+            if p0.runs:
+                style_src = p0.runs[0]
+        except Exception:
+            style_src = None
+
+        def _copy_font(src_run, dst_run) -> None:
+            if src_run is None:
+                return
+            try:
+                sf = src_run.font
+                df = dst_run.font
+                df.name = sf.name
+                df.size = sf.size
+                df.bold = sf.bold
+                df.italic = sf.italic
+                df.underline = sf.underline
+                # Keep the existing color for the numeric run; glyph will override.
+                try:
+                    df.color.rgb = sf.color.rgb
+                except Exception:
+                    pass
+            except Exception:
+                return
+
+        shape.text_frame.text = ""
+        p = shape.text_frame.paragraphs[0]
+        p.text = ""
+
+        r1 = p.add_run()
+        r1.text = glyph
+        _copy_font(style_src, r1)
+        try:
+            r1.font.color.rgb = rgb
+        except Exception:
+            pass
+
+        r2 = p.add_run()
+        r2.text = f" {mag_txt}"
+        _copy_font(style_src, r2)
+        return True
+
+    def _rebuild_paragraph_with_tokens(paragraph) -> int:
+        """Rebuild paragraph text replacing tokens; VAR_* tokens get colored glyph only."""
+
+        try:
+            src = paragraph.text or ""
+        except Exception:
+            src = ""
+        if not src:
+            return 0
+
+        # Only rebuild if the paragraph contains at least one VAR_* token.
+        # For normal tokens, we keep the original run structure to preserve formatting.
+        contains_var_token = False
+        for m in re.finditer(r"\{\{([^}]+)\}\}", src):
+            key = m.group(1)
+            if key in mapping and _is_var_field(key):
+                contains_var_token = True
+                break
+        if not contains_var_token:
+            return 0
+
+        # Capture styling from the first run (if any) so we don't lose template sizing.
+        style_src = None
+        try:
+            if paragraph.runs:
+                style_src = paragraph.runs[0]
+        except Exception:
+            style_src = None
+
+        def _copy_font(src_run, dst_run) -> None:
+            if src_run is None:
+                return
+            try:
+                sf = src_run.font
+                df = dst_run.font
+                df.name = sf.name
+                df.size = sf.size
+                df.bold = sf.bold
+                df.italic = sf.italic
+                df.underline = sf.underline
+                try:
+                    df.color.rgb = sf.color.rgb
+                except Exception:
+                    pass
+            except Exception:
+                return
+
+        # Build segments: (text, optional_rgb)
+        segs: list[tuple[str, RGBColor | None]] = []
+        replaced_local = 0
+        pos = 0
+        for m in re.finditer(r"\{\{([^}]+)\}\}", src):
+            key = m.group(1)
+            if key not in mapping:
+                continue
+
+            start, end = m.span(0)
+            if start > pos:
+                segs.append((src[pos:start], None))
+
+            raw = mapping[key]
+            if _is_var_field(key):
+                parts = _format_var_indicator_parts(raw)
+                if parts is None:
+                    segs.append((raw, None))
+                else:
+                    glyph, mag_txt, rgb = parts
+                    segs.append((glyph, rgb))
+                    segs.append((f" {mag_txt}", None))
+            else:
+                segs.append((raw, None))
+
+            pos = end
+            replaced_local += 1
+
+        if replaced_local == 0:
+            return 0
+
+        if pos < len(src):
+            segs.append((src[pos:], None))
+
+        paragraph.text = ""
+        for text, rgb in segs:
+            run = paragraph.add_run()
+            run.text = text
+            _copy_font(style_src, run)
+            if rgb is not None:
+                try:
+                    run.font.color.rgb = rgb
+                except Exception:
+                    pass
+
+        return replaced_local
+
     if not getattr(shape, "has_text_frame", False):
         return 0
 
@@ -130,7 +349,11 @@ def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
     replaced = 0
     alt = _get_shape_alt_text(shape)
     if alt and alt in mapping:
-        shape.text_frame.text = mapping[alt]
+        raw = mapping[alt]
+        if _is_var_field(alt):
+            if _set_shape_text_with_var(raw=raw):
+                return 1
+        shape.text_frame.text = raw
         return 1
 
     full_text = (shape.text_frame.text or "")
@@ -140,11 +363,21 @@ def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
     # Whole-text placeholder (e.g., slide1_title)
     key = full_text.strip()
     if key in mapping:
-        shape.text_frame.text = mapping[key]
+        raw = mapping[key]
+        if _is_var_field(key):
+            if _set_shape_text_with_var(raw=raw):
+                return 1
+        shape.text_frame.text = raw
         return 1
 
     # Token replacement (recommended): {{slide1_title}}
     for paragraph in shape.text_frame.paragraphs:
+        # Only rebuild when needed for VAR_* (mixed-color) formatting.
+        replaced_here = _rebuild_paragraph_with_tokens(paragraph)
+        if replaced_here:
+            replaced += replaced_here
+            continue
+
         # Try run-based replacement first (keeps formatting).
         for run in paragraph.runs:
             t = run.text

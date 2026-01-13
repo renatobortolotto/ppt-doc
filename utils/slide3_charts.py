@@ -112,6 +112,7 @@ def plot_emprestimos_stacked(
     left_label_margin_slots: float = 1.15,
     show_delta_pct: bool = True,
     show_delta_bracket: bool = True,
+    font_scale: float = 1.0,
     figsize=(10, 4.8),
     dpi: int = 240,
 ):
@@ -169,7 +170,7 @@ def plot_emprestimos_stacked(
                 str(label),
                 ha="right",
                 va="center",
-                fontsize=9,
+                fontsize=9 * float(font_scale),
                 color="#2f2f2f",
                 clip_on=False,
             )
@@ -187,7 +188,7 @@ def plot_emprestimos_stacked(
                     _fmt_number(val, decimals=1),
                     ha="center",
                     va="center",
-                    fontsize=9,
+                    fontsize=9 * float(font_scale),
                     color=_text_color_for_bg_rgba(color),
                 )
 
@@ -203,7 +204,7 @@ def plot_emprestimos_stacked(
             xytext=(0, 6),
             ha="center",
             va="bottom",
-            fontsize=10,
+            fontsize=10 * float(font_scale),
             fontweight="bold",
             color="#2f2f2f",
             clip_on=False,
@@ -257,7 +258,7 @@ def plot_emprestimos_stacked(
                 label,
                 ha="center",
                 va="bottom",
-                fontsize=9,
+                fontsize=9 * float(font_scale),
                 color="#2f2f2f",
                 zorder=5,
                 clip_on=False,
@@ -269,7 +270,7 @@ def plot_emprestimos_stacked(
             ax.set_ylim(cur_ymin, max(cur_ymax, delta_label_top + offset_y))
 
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, rotation=0, fontsize=10)
+    ax.set_xticklabels(xlabels, rotation=0, fontsize=10 * float(font_scale))
     ax.set_yticks([])
     for s in ("left", "right", "top"):
         ax.spines[s].set_visible(False)
@@ -313,6 +314,7 @@ def generate_slide3_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         left_label_margin_slots=1.15,
         show_delta_pct=True,
         show_delta_bracket=True,
+        font_scale=1.5,
         dpi=240,
         figsize=(10, 4.8),
     )
@@ -331,6 +333,7 @@ def generate_slide3_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
             show_delta_bracket=True,
             value_decimals=1,
             bar_width_scale=0.70,
+            font_scale=1.5,
             output_path=out09,
         )
     )

@@ -35,6 +35,8 @@ class ExcelBarChartSpec:
     value_decimals: Optional[int] = None
     # Optional: multiply computed bar width (e.g. 0.70 for 30% thinner)
     bar_width_scale: float = 1.0
+    # Optional: scale all font sizes (e.g. 1.5 to increase by ~50%)
+    font_scale: float = 1.0
 
 
 def _read_range_row(ws, cell_range: str) -> List[object]:
@@ -176,12 +178,19 @@ def plot_bar_from_excel(spec: ExcelBarChartSpec) -> Tuple[plt.Figure, plt.Axes]:
 
     is_9m_two_bars = bool(spec.fixed_slot_count) and n == 2 and slot_count > n
 
+    try:
+        font_scale = float(spec.font_scale)
+    except Exception:
+        font_scale = 1.0
+    if not np.isfinite(font_scale) or font_scale <= 0:
+        font_scale = 1.0
+
     font_base = 9
     if is_9m_two_bars:
         font_base = 12
-    font_value = font_base
-    font_xtick = font_base
-    font_delta = font_base
+    font_value = float(font_base) * font_scale
+    font_xtick = float(font_base) * font_scale
+    font_delta = float(font_base) * font_scale
 
     step = 1.0
     x_pad = 0.5

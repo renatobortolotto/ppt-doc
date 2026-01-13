@@ -24,11 +24,17 @@ class ExcelBarChartSpec:
     ylabel_cell: Optional[str] = None
     title: Optional[str] = None
     highlight_last: bool = True
+    # Optional: force a single color for all bars (e.g. "#123a7a")
+    bar_color: Optional[str] = None
     output_path: Optional[Union[str, Path]] = None
     show_delta_pct: bool = False
     show_delta_bracket: bool = False
     delta_pairs: Tuple[Tuple[int, int], ...] = ()
     fixed_slot_count: Optional[int] = None
+    # Optional: format bar-top values with decimals (None keeps existing 0-decimal format)
+    value_decimals: Optional[int] = None
+    # Optional: multiply computed bar width (e.g. 0.70 for 30% thinner)
+    bar_width_scale: float = 1.0
 
 
 def _read_range_row(ws, cell_range: str) -> List[object]:
@@ -151,15 +157,22 @@ def plot_bar_from_excel(spec: ExcelBarChartSpec) -> Tuple[plt.Figure, plt.Axes]:
 
     n = len(values)
 
-    colors = ["#8d98a6"] * n
-    if spec.highlight_last and colors:
-        colors[-1] = "#123a7a"
+    if spec.bar_color:
+        colors = [str(spec.bar_color)] * n
+    else:
+        colors = ["#8d98a6"] * n
+        if spec.highlight_last and colors:
+            colors[-1] = "#123a7a"
 
     base_width = 0.8
     slot_count = int(spec.fixed_slot_count) if spec.fixed_slot_count else n
     slot_count = max(slot_count, n)
     ratio = n / slot_count if slot_count else 1.0
     width = base_width if slot_count == n else base_width * float(np.sqrt(ratio))
+    try:
+        width = float(width) * float(spec.bar_width_scale)
+    except Exception:
+        pass
 
     is_9m_two_bars = bool(spec.fixed_slot_count) and n == 2 and slot_count > n
 
@@ -182,10 +195,16 @@ def plot_bar_from_excel(spec: ExcelBarChartSpec) -> Tuple[plt.Figure, plt.Axes]:
 
     last_idx = n - 1
     for i, (rect, val) in enumerate(zip(bars, values)):
+        if spec.value_decimals is None:
+            value_label = f"{val:,.0f}".replace(",", ".")
+        else:
+            dec = max(0, int(spec.value_decimals))
+            # Requested formatting for some charts: X.X using dot as decimal separator.
+            value_label = f"{float(val):.{dec}f}"
         ax.text(
             rect.get_x() + rect.get_width() / 2,
             rect.get_height(),
-            f"{val:,.0f}".replace(",", "."),
+            value_label,
             ha="center",
             va="bottom",
             fontsize=font_value,

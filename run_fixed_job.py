@@ -11,6 +11,7 @@ from typing import Any, Dict
 from update_ppt import _flatten_text_payload, update_presentation
 from utils.slide1_charts import generate_slide1_charts
 from utils.slide2_charts import generate_slide2_charts
+from utils.slide3_charts import generate_slide3_charts
 from utils.xlsx_text_fields import extract_xlsx_to_text_mapping, parse_text_fields_json
 
 
@@ -228,6 +229,10 @@ def main() -> None:
         logging.info("Gerando PNGs do slide 2 (05..07)...")
         s2 = generate_slide2_charts(xlsx_path=xlsx_path, output_dir=images_dir)
         logging.info("OK: slide 2 gerou %d arquivos", len(s2))
+
+        logging.info("Gerando PNGs do slide 3 (08..09)...")
+        s3 = generate_slide3_charts(xlsx_path=xlsx_path, output_dir=images_dir)
+        logging.info("OK: slide 3 gerou %d arquivos", len(s3))
 
     text_fields_config = _resolve_path(repo_root, str(cfg.get("text_fields_config", "config/text_fields.json")))
 

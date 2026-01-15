@@ -105,6 +105,16 @@ def _read_range_row(ws, cell_range: str) -> List[object]:
     return out
 
 
+def _cell_is_percent_formatted(cell) -> bool:
+    try:
+        fmt = cell.number_format
+    except Exception:
+        return False
+    if not fmt:
+        return False
+    return "%" in str(fmt)
+
+
 def read_range_col(ws, cell_range: str) -> List[object]:
     """Read a vertical A1 range and return a list."""
 
@@ -397,7 +407,25 @@ def plot_line_from_excel(
 
     ws = wb[sheet_name]
 
-    values = to_float_list(_read_range_row(ws, values_range))
+    # Excel stores percent-formatted numeric cells as fractions (e.g. 0.09 shown as 9%).
+    # When fmt_as_percent=True, we want the chart labels in percentage points.
+    min_col, min_row, max_col, max_row = range_boundaries(values_range)
+    values: List[float] = []
+    for r in range(min_row, max_row + 1):
+        for c in range(min_col, max_col + 1):
+            cell = ws.cell(row=r, column=c)
+            raw = cell.value
+            if raw is None or (isinstance(raw, str) and raw.strip() == ""):
+                v = 0.0
+            elif isinstance(raw, str):
+                v = _parse_number_like(raw)
+            else:
+                v = float(raw)
+
+            if fmt_as_percent and _cell_is_percent_formatted(cell) and isinstance(raw, (int, float)):
+                v *= 100.0
+            values.append(v)
+
     xlabels = ["" if v is None else str(v) for v in _read_range_row(ws, xlabels_range)]
     if len(values) != len(xlabels):
         raise ValueError(f"Tamanhos diferentes: valores={len(values)} xlabels={len(xlabels)}")

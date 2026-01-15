@@ -15,6 +15,63 @@ from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
 
+def _parse_number_like(value: str) -> float:
+    """Parse numeric strings, including pt-BR formats and percent strings.
+
+    Examples accepted:
+    - "9%", "9 %", "9,5%"
+    - "1.234,56" (pt-BR thousands + decimal)
+    - "1,234.56" (en-US thousands + decimal)
+    """
+
+    s = value.replace("\u00a0", " ").strip()
+    if s == "":
+        return 0.0
+
+    negative = False
+    if s.startswith("(") and s.endswith(")"):
+        negative = True
+        s = s[1:-1].strip()
+
+    if s.startswith("+"):
+        s = s[1:].strip()
+
+    if s.endswith("%"):
+        s = s[:-1].strip()
+
+    s = s.replace(" ", "")
+    if s == "":
+        return 0.0
+
+    # Heuristic for decimal/thousand separators
+    if "," in s and "." in s:
+        last_comma = s.rfind(",")
+        last_dot = s.rfind(".")
+        if last_comma > last_dot:
+            # pt-BR style: 1.234,56
+            s = s.replace(".", "")
+            s = s.replace(",", ".")
+        else:
+            # en-US style: 1,234.56
+            s = s.replace(",", "")
+    elif "," in s:
+        # Likely pt-BR decimal: 12,34
+        s = s.replace(".", "")
+        s = s.replace(",", ".")
+    else:
+        # If only dots exist, decide between decimal vs thousands grouping.
+        # Treat patterns like 1.234 or 1.234.567 as thousands separators.
+        if "." in s:
+            parts = s.split(".")
+            if len(parts) > 1 and all(p.isdigit() for p in parts) and all(len(p) == 3 for p in parts[1:]):
+                s = "".join(parts)
+        # Remove thousands commas if present
+        s = s.replace(",", "")
+
+    num = float(s)
+    return -num if negative else num
+
+
 @dataclass(frozen=True)
 class ExcelBarChartSpec:
     file_path: Union[str, Path]
@@ -66,7 +123,10 @@ def to_float_list(values: Sequence[object]) -> List[float]:
             out.append(0.0)
             continue
         try:
-            out.append(float(v))
+            if isinstance(v, str):
+                out.append(_parse_number_like(v))
+            else:
+                out.append(float(v))
         except (TypeError, ValueError) as exc:
             raise ValueError(f"Valor não numérico no range: {v!r}") from exc
     return out

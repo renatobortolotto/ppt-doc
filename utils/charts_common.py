@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple, Union
+import unicodedata
 
 import matplotlib
 
@@ -580,15 +581,84 @@ def plot_donut_from_excel(spec: ExcelDonutChartSpec) -> Tuple[plt.Figure, plt.Ax
     cat_labels = list(category_totals.keys())
     cat_values = list(category_totals.values())
 
-    # Default colors if not provided
-    default_inner_colors = [
-        "#1f3a8a", "#b11226", "#d64550", "#b0dfe5", "#7ec8e3",
-        "#3cb4ac", "#2ca6a4", "#6bd4c6", "#4f9da6",
-    ]
-    default_outer_colors = ["#1f3a8a", "#b11226", "#3cb4ac"]
-    
-    inner_colors = spec.inner_colors if spec.inner_colors else default_inner_colors[:len(labels)]
-    outer_colors = spec.outer_colors if spec.outer_colors else default_outer_colors[:len(cat_labels)]
+    def _norm_text(s: str) -> str:
+        s = "" if s is None else str(s)
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(ch for ch in s if not unicodedata.combining(ch))
+        s = " ".join(s.strip().lower().split())
+        return s
+
+    def _hex_to_rgb(hex_color: str) -> Tuple[float, float, float]:
+        s = str(hex_color).strip().lstrip("#")
+        if len(s) == 3:
+            s = "".join(ch * 2 for ch in s)
+        if len(s) != 6:
+            raise ValueError(f"Cor inválida: {hex_color!r}")
+        r = int(s[0:2], 16) / 255.0
+        g = int(s[2:4], 16) / 255.0
+        b = int(s[4:6], 16) / 255.0
+        return (r, g, b)
+
+    def _rgb_to_hex(rgb: Tuple[float, float, float]) -> str:
+        r, g, b = rgb
+        r_i = int(max(0, min(255, round(r * 255.0))))
+        g_i = int(max(0, min(255, round(g * 255.0))))
+        b_i = int(max(0, min(255, round(b * 255.0))))
+        return f"#{r_i:02x}{g_i:02x}{b_i:02x}"
+
+    def _lighten(hex_color: str, t: float) -> str:
+        """Blend color with white. t=0 keeps original, t=1 becomes white."""
+        t = float(t)
+        if not np.isfinite(t):
+            t = 0.0
+        t = max(0.0, min(1.0, t))
+        r, g, b = _hex_to_rgb(hex_color)
+        r2 = r + (1.0 - r) * t
+        g2 = g + (1.0 - g) * t
+        b2 = b + (1.0 - b) * t
+        return _rgb_to_hex((r2, g2, b2))
+
+    # Palette by top-level category (outer ring). Outer stays darkest; inner uses lighter shades.
+    # NOTE: normalize to match variants like "Veículos" vs "Veiculos".
+    base_by_category = {
+        "veiculos leves": "#1f3a8a",  # navy (dark)
+        "atacado": "#b11226",  # red (dark)
+        "growth": "#0f766e",  # teal (dark)
+    }
+
+    def _base_color_for_category(cat: str) -> str:
+        key = _norm_text(cat)
+        if key in base_by_category:
+            return base_by_category[key]
+        # Fallback: stable palette
+        fallback = ["#1f3a8a", "#b11226", "#0f766e", "#7c3aed", "#f59e0b"]
+        return fallback[abs(hash(key)) % len(fallback)]
+
+    if spec.outer_colors:
+        # Keep explicit override (but ensure length matches).
+        outer_colors = list(spec.outer_colors)[: len(cat_labels)]
+    else:
+        outer_colors = [_base_color_for_category(cat) for cat in cat_labels]
+
+    if spec.inner_colors:
+        inner_colors = list(spec.inner_colors)[: len(labels)]
+    else:
+        # Generate inner colors as lighter shades within each category palette.
+        inner_colors = ["#cccccc"] * len(labels)
+        cat_to_indices: "OrderedDict[str, List[int]]" = OrderedDict()
+        for idx, cat in enumerate(categories):
+            cat_to_indices.setdefault(cat, []).append(idx)
+
+        for cat, idxs in cat_to_indices.items():
+            base = _base_color_for_category(cat)
+            m = len(idxs)
+            if m <= 1:
+                ts = [0.40]
+            else:
+                # Keep inner segments noticeably lighter than the outer ring.
+                ts = list(np.linspace(0.18, 0.68, num=m))
+            for j, idx in enumerate(idxs):
+                inner_colors[idx] = _lighten(base, ts[j])
 
     font_scale = float(spec.font_scale) if spec.font_scale else 1.0
 

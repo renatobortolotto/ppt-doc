@@ -18,26 +18,6 @@ def generate_pizza_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
 
     generated: list[Path] = []
 
-    # Cores para os segmentos internos do donut
-    inner_colors = [
-        "#1f3a8a",  # Veículos Leves Usados (azul escuro)
-        "#b11226",  # Corporate (vermelho)
-        "#d64550",  # Large e Instituições (vermelho claro)
-        "#b0dfe5",  # Demais (azul bem claro)
-        "#7ec8e3",  # PME (azul claro)
-        "#3cb4ac",  # EGV (verde água)
-        "#2ca6a4",  # Cartões (verde água escuro)
-        "#6bd4c6",  # Painéis Solares (verde claro)
-        "#4f9da6",  # Motos, Pesados e Novos (azul esverdeado)
-    ]
-
-    # Cores para as categorias externas do donut
-    outer_colors = [
-        "#1f3a8a",  # Veículos Leves - azul escuro
-        "#b11226",  # Atacado - vermelho
-        "#3cb4ac",  # Growth - verde água
-    ]
-
     # 10) Gráfico de Carteira de Crédito Ampliada (donut)
     fig, _ax = plot_donut_from_excel(
         ExcelDonutChartSpec(
@@ -48,8 +28,6 @@ def generate_pizza_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
             values_range="C2:C10",
             center_text="Carteira\nAmpliada\nR$ 92.7 bi",
             title=None,
-            inner_colors=inner_colors,
-            outer_colors=outer_colors,
             output_path=output_dir / "10_pizza_carteira.png",
             figsize=(16, 12),
             font_scale=1.5,

@@ -96,6 +96,33 @@ class ExcelBarChartSpec:
     font_scale: float = 1.0
 
 
+@dataclass(frozen=True)
+class ExcelDonutChartSpec:
+    """Spec for a nested donut chart with categories (outer) and segments (inner)."""
+    file_path: Union[str, Path]
+    sheet_name: str
+    # Range with segment labels (column B in the example)
+    labels_range: str
+    # Range with segment values (column C)
+    values_range: str
+    # Range with category names (column A) - used to group segments
+    categories_range: str
+    # Center text (e.g., "Carteira\nAmpliada\nR$ 92.7 bi")
+    center_text: str
+    # Output path for the PNG
+    output_path: Union[str, Path]
+    # Optional title
+    title: Optional[str] = None
+    # Colors for inner segments (one per segment)
+    inner_colors: Optional[List[str]] = None
+    # Colors for outer categories (one per category)
+    outer_colors: Optional[List[str]] = None
+    # Figure size
+    figsize: Tuple[float, float] = (16, 12)
+    # Optional: scale all font sizes (e.g. 1.5 to increase by ~50%)
+    font_scale: float = 1.0
+
+
 def _read_range_row(ws, cell_range: str) -> List[object]:
     min_col, min_row, max_col, max_row = range_boundaries(cell_range)
     out: List[object] = []
@@ -505,6 +532,197 @@ def plot_line_from_excel(
     fig.tight_layout(pad=0.2)
 
     out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, dpi=220, transparent=True, bbox_inches="tight", pad_inches=0.08)
+
+    return fig, ax
+
+
+def plot_donut_from_excel(spec: ExcelDonutChartSpec) -> Tuple[plt.Figure, plt.Axes]:
+    """
+    Generate a nested donut chart from Excel data.
+    
+    - Outer ring: aggregated categories
+    - Inner ring: individual segments with box labels
+    """
+    from collections import OrderedDict
+    
+    file_path = Path(spec.file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"Arquivo não encontrado: {file_path}")
+
+    wb = load_workbook(filename=file_path, data_only=True)
+    if spec.sheet_name not in wb.sheetnames:
+        raise ValueError(f"Aba não encontrada: {spec.sheet_name!r}. Disponíveis: {wb.sheetnames}")
+
+    ws = wb[spec.sheet_name]
+
+    # Read data from Excel
+    categories_raw = _read_range_row(ws, spec.categories_range)
+    labels_raw = _read_range_row(ws, spec.labels_range)
+    values_raw = _read_range_row(ws, spec.values_range)
+
+    # Filter out empty rows and build lists
+    categories = []
+    labels = []
+    values = []
+    for cat, lbl, val in zip(categories_raw, labels_raw, values_raw):
+        if lbl is not None and val is not None:
+            categories.append(str(cat) if cat else "")
+            labels.append(str(lbl))
+            values.append(float(val) if val else 0.0)
+
+    # Aggregate by category for outer ring
+    category_totals = OrderedDict()
+    for cat, val in zip(categories, values):
+        category_totals[cat] = category_totals.get(cat, 0) + val
+    
+    cat_labels = list(category_totals.keys())
+    cat_values = list(category_totals.values())
+
+    # Default colors if not provided
+    default_inner_colors = [
+        "#1f3a8a", "#b11226", "#d64550", "#b0dfe5", "#7ec8e3",
+        "#3cb4ac", "#2ca6a4", "#6bd4c6", "#4f9da6",
+    ]
+    default_outer_colors = ["#1f3a8a", "#b11226", "#3cb4ac"]
+    
+    inner_colors = spec.inner_colors if spec.inner_colors else default_inner_colors[:len(labels)]
+    outer_colors = spec.outer_colors if spec.outer_colors else default_outer_colors[:len(cat_labels)]
+
+    font_scale = float(spec.font_scale) if spec.font_scale else 1.0
+
+    # Create figure
+    fig, ax = plt.subplots(figsize=spec.figsize)
+    fig.patch.set_alpha(0)
+    ax.set_facecolor("none")
+
+    # --- OUTER RING (Categories) ---
+    outer_result = ax.pie(
+        cat_values,
+        startangle=90,
+        counterclock=False,
+        colors=outer_colors,
+        wedgeprops=dict(width=0.25, edgecolor="white", linewidth=2),
+        radius=1.0,
+    )
+    outer_wedges = outer_result[0]
+
+    # --- INNER RING (Segments) ---
+    inner_result = ax.pie(
+        values,
+        startangle=90,
+        counterclock=False,
+        colors=inner_colors,
+        wedgeprops=dict(width=0.30, edgecolor="white", linewidth=1),
+        radius=0.70,
+    )
+    inner_wedges = inner_result[0]
+
+    # --- CATEGORY LABELS (outer ring) with boxes ---
+    outer_total = sum(cat_values)
+    for i, (wedge, label, value, color) in enumerate(zip(outer_wedges, cat_labels, cat_values, outer_colors)):
+        ang = (wedge.theta2 + wedge.theta1) / 2
+        pct = value / outer_total * 100
+
+        # Special adjustment for "Veiculos Leves" to avoid overlap
+        if "Veiculos" in label or "Veículos" in label:
+            r = 1.35
+            ang_adjusted = ang + 15
+        else:
+            r = 1.18
+            ang_adjusted = ang
+
+        x = r * np.cos(np.deg2rad(ang_adjusted))
+        y = r * np.sin(np.deg2rad(ang_adjusted))
+
+        ax.annotate(
+            f"{label}\n{pct:.0f}%",
+            xy=(0.9 * np.cos(np.deg2rad(ang)), 0.9 * np.sin(np.deg2rad(ang))),
+            xytext=(x, y),
+            fontsize=10 * font_scale,
+            fontweight="bold",
+            ha="center",
+            va="center",
+            color="white",
+            bbox=dict(
+                boxstyle="round,pad=0.4",
+                facecolor=color,
+                edgecolor="white",
+                linewidth=2,
+            ),
+            arrowprops=dict(
+                arrowstyle="-",
+                color=color,
+                lw=2,
+            ),
+        )
+
+    # --- SEGMENT LABELS (inner ring) with boxes ---
+    inner_total = sum(values)
+    for i, (wedge, label, value, color) in enumerate(zip(inner_wedges, labels, values, inner_colors)):
+        ang = (wedge.theta2 + wedge.theta1) / 2
+        pct = value / inner_total * 100
+
+        r_start = 0.55
+        x_start = r_start * np.cos(np.deg2rad(ang))
+        y_start = r_start * np.sin(np.deg2rad(ang))
+
+        # Special adjustment for "Veiculos Leves Usados" to avoid overlap
+        if "Usados" in label:
+            r_end = 1.65
+            ang_adjusted = ang - 15
+        else:
+            r_end = 1.50
+            ang_adjusted = ang
+
+        x_end = r_end * np.cos(np.deg2rad(ang_adjusted))
+        y_end = r_end * np.sin(np.deg2rad(ang_adjusted))
+
+        ax.annotate(
+            f"{label}\n{pct:.0f}%",
+            xy=(x_start, y_start),
+            xytext=(x_end, y_end),
+            fontsize=8 * font_scale,
+            ha="center",
+            va="center",
+            bbox=dict(
+                boxstyle="round,pad=0.3",
+                facecolor="white",
+                edgecolor=color,
+                linewidth=1.5,
+            ),
+            arrowprops=dict(
+                arrowstyle="-",
+                color=color,
+                lw=1,
+            ),
+        )
+
+    # --- CENTER TEXT ---
+    ax.text(
+        0, 0, spec.center_text,
+        ha="center", va="center",
+        fontsize=14 * font_scale, fontweight="bold",
+        linespacing=1.4,
+        bbox=dict(
+            boxstyle="circle,pad=0.5",
+            facecolor="white",
+            edgecolor="lightgray",
+            linewidth=1,
+        ),
+    )
+
+    if spec.title:
+        ax.set_title(spec.title, fontsize=15 * font_scale, fontweight="bold", pad=20)
+
+    ax.set_aspect('equal')
+    ax.set_xlim(-2.2, 2.2)
+    ax.set_ylim(-2.0, 2.0)
+    fig.tight_layout()
+
+    # Save to file
+    out = Path(spec.output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=220, transparent=True, bbox_inches="tight", pad_inches=0.08)
 

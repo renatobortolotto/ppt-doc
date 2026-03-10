@@ -13,6 +13,13 @@ from utils.slide1_charts import generate_slide1_charts
 from utils.slide2_charts import generate_slide2_charts
 from utils.slide3_charts import generate_slide3_charts
 from utils.slide_pizza_charts import generate_pizza_charts
+from utils.slide8_charts import generate_slide8_charts
+from utils.slide9_charts import generate_slide9_charts
+from utils.slide11_charts import generate_slide11_charts
+from utils.slide12_charts import generate_slide12_charts
+from utils.slide13_charts import generate_slide13_charts
+from utils.slide14_charts import generate_slide14_charts
+from utils.slide15_charts import generate_slide15_charts
 from utils.xlsx_text_fields import extract_xlsx_to_text_mapping, parse_text_fields_json
 
 
@@ -238,6 +245,34 @@ def main() -> None:
         logging.info("Gerando PNGs do slide 4 (10..12)...")
         s4 = generate_pizza_charts(xlsx_path=xlsx_path, output_dir=images_dir)
         logging.info("OK: slide 4 gerou %d arquivos", len(s4))
+
+        logging.info("Gerando PNGs do slide 8 (13..14)...")
+        s8 = generate_slide8_charts(xlsx_path=xlsx_path, output_dir=images_dir)
+        logging.info("OK: slide 8 gerou %d arquivos", len(s8))
+
+        logging.info("Gerando PNGs do slide 9 (19..21)...")
+        s9 = generate_slide9_charts(xlsx_path=xlsx_path, output_dir=images_dir)
+        logging.info("OK: slide 9 gerou %d arquivos", len(s9))
+
+        logging.info("Gerando PNGs do slide 11 (22..24)...")
+        s11 = generate_slide11_charts(xlsx_path=xlsx_path, output_dir=images_dir)
+        logging.info("OK: slide 11 gerou %d arquivos", len(s11))
+
+        logging.info("Gerando PNGs do slide 12 (25)...")
+        s12 = generate_slide12_charts(xlsx_path=xlsx_path, output_dir=images_dir)
+        logging.info("OK: slide 12 gerou %d arquivos", len(s12))
+
+        logging.info("Gerando PNGs do slide 13 (26..29)...")
+        s13 = generate_slide13_charts(xlsx_path=xlsx_path, output_dir=images_dir)
+        logging.info("OK: slide 13 gerou %d arquivos", len(s13))
+
+        logging.info("Gerando PNGs do slide 14 (30)...")
+        s14 = generate_slide14_charts(xlsx_path=xlsx_path, output_dir=images_dir)
+        logging.info("OK: slide 14 gerou %d arquivos", len(s14))
+
+        logging.info("Gerando PNGs do slide 15 (31..32)...")
+        s15 = generate_slide15_charts(xlsx_path=xlsx_path, output_dir=images_dir)
+        logging.info("OK: slide 15 gerou %d arquivos", len(s15))
 
     text_fields_config = _resolve_path(repo_root, str(cfg.get("text_fields_config", "config/text_fields.json")))
 

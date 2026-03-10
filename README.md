@@ -1,100 +1,44 @@
 # ppt-doc
 
-Gera gráficos (PNG) a partir do Excel e atualiza um PowerPoint com esses gráficos, mantendo o layout manual (posição/tamanho/crop) já ajustado no PPT.
+Gera graficos (PNG) a partir do Excel e atualiza um PowerPoint com esses graficos, mantendo o layout manual (posicao/tamanho/crop) ja ajustado no PPT.
 
-Além disso, inclui um fluxo de **extração de dados de um XLSX para JSON** (baseado em um `specs.json`) para alimentar um prompt de LLM (ex.: Gemini) com apenas os valores relevantes.
+Na arquitetura atual, este projeto nao chama mais a LLM diretamente. Ele consome:
+
+- o `xlsx`
+- o JSON gerado pelo servico de LLM (ex.: `langchain-ex`)
+
+e monta o `.pptx` final.
 
 ## Arquivos principais
 
 - `test-ppt.ipynb`: gera os PNGs dos gráficos a partir do `testing.xlsx`.
 - `update_ppt.py`: atualiza o PowerPoint trocando as imagens **em lugar** (sem distorcer e sem mexer na geometria).
 - `specs.example.json`: exemplo de specs para extração.
-- `main-framework.py`: exemplo de “chassi” de API corporativa (recebe XLSX, extrai JSON, chama Gemini e retorna JSON).
+- `main-framework.py`: exemplo de chassi corporativo para montar o PPT a partir de `xlsx + llm_response`
+- `presentation_builder.py`: servico reutilizavel para montar o PPT por path ou por bytes
 - `utils/`: utilitários reutilizáveis (extração XLSX e parsing robusto de JSON retornado pelo LLM).
 - `tests/`: testes unitários (unittest) do que é usado no fluxo do `main-framework.py`.
 
-## Fluxo completo (XLSX → specs.json → JSON → Gemini → JSON)
+## Fluxo completo
 
-O fluxo que você descreveu (e que está modelado no `main-framework.py`) é:
-
-1) **API recebe um arquivo `.xlsx`**
-- No ambiente corporativo, o framework entrega `file.content` como `bytes`.
-
-2) **Carrega um `config/specs.json`**
-- O `config/specs.json` define quais ranges (A1) ler do Excel.
-- Cada spec tem:
-  - `id`: identificador (use camelCase se quiser bater com o seu schema)
-  - `sheet`: nome da aba (opcional se você usar `DEFAULT_SHEET`)
-  - `labels_range`: range A1 dos labels (ex.: `L3:M3`)
-  - `values_range`: range A1 dos valores (ex.: `L18:M18`)
-
-Exemplo (formato recomendado) em `config/specs.json`:
-
-```json
-[
-  {
-    "id": "lucroTrimestre",
-    "sheet": "DRE Saida",
-    "labels_range": "C3:K3",
-    "values_range": "C18:K18"
-  },
-  {
-    "id": "lucro9M",
-    "sheet": "DRE Saida",
-    "labels_range": "L3:M3",
-    "values_range": "L18:M18"
-  }
-]
-```
-
-3) **Extrai o XLSX → dict JSON-friendly**
-- Implementado em `utils/xlsx_extract.py`.
-- O `main-framework.py` usa `extract_xlsx_bytes_to_dict(...)` (entrada em bytes).
-- Por padrão, a extração pode incluir metadados (`sheet` e `ranges`) e pode normalizar as chaves para minúsculas.
-
-Formato típico produzido (com `lowercase_fields=True`):
-
-```json
-{
-  "lucroTrimestre": {
-    "labels": ["3T23", "4T23"],
-    "values": [285.0, 302.0],
-    "sheet": "DRE Saida",
-    "ranges": {"labels": "C3:D3", "values": "C18:D18"}
-  },
-  "lucro9M": {
-    "labels": ["9M24", "9M25"],
-    "values": [1180.0, 1400.0],
-    "sheet": "DRE Saida",
-    "ranges": {"labels": "L3:M3", "values": "L18:M18"}
-  }
-}
-```
-
-4) **Monta o prompt final**
-- O JSON extraído é serializado e concatenado nas instruções do prompt.
-- Resultado: o modelo recebe apenas dados relevantes + regras de output.
-
-5) **Chama o Gemini e faz parse do JSON de saída**
-- O modelo é instruído a retornar apenas JSON.
-- Na prática, pode vir com fences (` ```json `) ou lixo em volta; por isso `utils/json_utils.py` tem `coerce_json()`.
-
-6) **A API retorna JSON**
-- Se o parse falhar, retorna um JSON de erro com `model_response` para debug.
+1) `langchain-ex` recebe o `xlsx` e devolve um JSON no formato de `llm_response.latest.json`
+2) `ppt-doc` recebe o `xlsx` e esse JSON da LLM
+3) gera/atualiza os PNGs dos graficos
+4) mistura campos vindos do Excel com campos vindos da LLM
+5) atualiza o template PPT e devolve o `.pptx`
 
 ## Rodando o exemplo de API (main-framework)
 
-O `main-framework.py` é um exemplo para o seu chassi corporativo. Ele usa:
+O `main-framework.py` agora expõe o fluxo de montagem do PPT.
 
-- `SPECS_JSON_PATH`: caminho do specs (default: `config/specs.json`)
-- `DEFAULT_SHEET`: aba default (opcional)
-- `project_id` e `location`: usados para instanciar `Client(vertexai=True, ...)`
+Entradas suportadas:
 
-Obs.: as dependências `genai_framework` e `google.genai` não estão disponíveis neste workspace; no seu ambiente corporativo elas devem existir.
+- rota `compose_presentation(xlsx_file, llm_response_file)` recebendo dois arquivos
+- helper Python `compose_presentation_files(xlsx_file, llm_response_file)` usando o mesmo contrato
 
 ## Testes unitários
 
-Os testes cobrem apenas o que é usado no fluxo do `main-framework.py` (os utilitários em `utils/`).
+Os testes cobrem o fluxo do builder e do `main-framework.py`.
 
 Rodar:
 
@@ -138,7 +82,7 @@ quanto o wrapper do endpoint:
 {"response": {"titles": {"slide1_title": "..."}, "subtitles": {"slide1_subtitle": "..."}}}
 ```
 
-## Job fixo (só passa o XLSX)
+## Job fixo
 
 Se essa aplicação vai ser “fixa” e você não quer passar um monte de argumentos no job, use o runner [run_fixed_job.py](run_fixed_job.py).
 
@@ -147,7 +91,7 @@ Você edita **uma vez só**:
 - [config/job_config.json](config/job_config.json): template do PPT, saída, images dir
 - [config/text_fields.json](config/text_fields.json): mapeamento `TOKEN -> célula A1` (e `default_sheet`)
 
-### Job 100% automático (XLSX → API/LLM → PPT)
+### Job 100% automático (XLSX -> API/LLM -> PPT)
 
 Se você quer que o job receba o XLSX e já dispare automaticamente:
 
@@ -178,6 +122,13 @@ Depois, no job você passa apenas o XLSX:
 ```bash
 cd /home/renato/ppt-doc
 ./.venv/bin/python run_fixed_job.py --xlsx /caminho/para/arquivo.xlsx
+```
+
+Se voce ja tiver o JSON da LLM em maos, pode passar os dois arquivos explicitamente:
+
+```bash
+cd /home/renato/projetos/double-projects/ppt-doc
+./.venv/bin/python run_fixed_job.py --xlsx /caminho/para/arquivo.xlsx --llm-json /caminho/para/llm_response.json
 ```
 
 ## Como funciona o `update_ppt.py`

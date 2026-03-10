@@ -12,37 +12,7 @@ class DummyFileInput:
         self.content = content
 
 
-class DummyModels:
-    def __init__(self):
-        self.last_call = None
-
-    def generate_content(self, model, contents, config):
-        # Record for optional assertions
-        self.last_call = {
-            "model": model,
-            "contents": contents,
-            "config": config,
-        }
-        resp = types.SimpleNamespace()
-        resp.text = '{"ok": true}'
-        return resp
-
-
-class DummyClient:
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
-        self.models = DummyModels()
-
-
-class DummyTypes:
-    class GenerateContentConfig:
-        def __init__(self, temperature: float, max_output_tokens: int):
-            self.temperature = temperature
-            self.max_output_tokens = max_output_tokens
-
-
 def _install_dummy_modules():
-    # genai_framework.decorators
     m_decorators = types.ModuleType("genai_framework.decorators")
 
     def file_input_route(_name):
@@ -51,8 +21,6 @@ def _install_dummy_modules():
         return decorator
 
     m_decorators.file_input_route = file_input_route
-
-    # genai_framework.models
     m_models = types.ModuleType("genai_framework.models")
 
     class FileInput:
@@ -61,15 +29,9 @@ def _install_dummy_modules():
 
     m_models.FileInput = FileInput
 
-    # google.genai
-    m_google_genai = types.ModuleType("google.genai")
-    m_google_genai.Client = DummyClient
-    m_google_genai.types = DummyTypes
-
     sys.modules["genai_framework"] = types.ModuleType("genai_framework")
     sys.modules["genai_framework.decorators"] = m_decorators
     sys.modules["genai_framework.models"] = m_models
-    sys.modules["google.genai"] = m_google_genai
 
 
 def _load_main_framework():
@@ -84,25 +46,60 @@ def _load_main_framework():
 
 
 class TestMainFramework(unittest.TestCase):
-    def test_analyze_file_success(self):
+    def test_compose_presentation_from_inputs_success(self):
         module = _load_main_framework()
-        with patch(f"{module.__name__}.parse_specs_json", return_value=[{"id": "lucroTrimestre"}]):
-            with patch(f"{module.__name__}.extract_xlsx_bytes_to_dict", return_value={"lucroTrimestre": {"labels": ["A"], "values": [1]}}):
-                # Ensure env var is set to avoid path resolution noise
-                os.environ["SPECS_JSON_PATH"] = str(Path("config/specs.json").resolve())
-                resp = module.analyze_file(DummyFileInput(b"xlsx-bytes"))
-        self.assertIn("response", resp)
-        self.assertEqual(resp["response"], {"ok": True})
+        fake_build = types.SimpleNamespace(
+            output_path=Path("/tmp/final.pptx"),
+            replaced_pictures=3,
+            replaced_placeholders=0,
+            replaced_text=2,
+            generated_chart_count=11,
+            applied_text_keys=("slide1_title",),
+        )
+        with patch(
+            f"{module.__name__}.load_job_config",
+            return_value={"pptx_output": "main_testing.pptx"},
+        ):
+            with patch(
+                f"{module.__name__}.build_presentation_from_bytes",
+                return_value=(b"pptx-bytes", fake_build),
+            ):
+                resp = module.compose_presentation_from_inputs(
+                    b"xlsx-bytes",
+                    b'{"response":{"titles":{"slide1_title":"Titulo"}}}',
+                )
 
-    def test_analyze_file_invalid_xlsx(self):
+        self.assertEqual(resp["filename"], "main_testing.pptx")
+        self.assertEqual(resp["summary"]["replacedPictures"], 3)
+        self.assertTrue(resp["pptxBase64"])
+
+    def test_compose_presentation_files_invalid_json(self):
         module = _load_main_framework()
-        with patch(f"{module.__name__}.parse_specs_json", return_value=[{"id": "x"}]):
-            with patch(f"{module.__name__}.extract_xlsx_bytes_to_dict", side_effect=ValueError("Arquivo enviado não é um XLSX válido")):
-                os.environ["SPECS_JSON_PATH"] = str(Path("config/specs.json").resolve())
-                resp = module.analyze_file(DummyFileInput(b"bad"))
+        resp = module.compose_presentation(
+            DummyFileInput(b"xlsx"),
+            DummyFileInput(b"not-json"),
+        )
         self.assertIn("error", resp)
-        self.assertEqual(resp["error"], "Falha ao extrair dados do XLSX usando specs.json.")
+        self.assertEqual(
+            resp["error"],
+            "Falha ao montar o PowerPoint a partir do XLSX e do JSON da LLM.",
+        )
         self.assertIn("details", resp)
+
+    def test_compose_presentation_files_success(self):
+        module = _load_main_framework()
+        with patch.object(
+            module,
+            "compose_presentation_from_inputs",
+            return_value={"filename": "main_testing.pptx", "pptxBase64": "b2s="},
+        ) as compose_mock:
+            resp = module.compose_presentation(
+                DummyFileInput(b"xlsx"),
+                DummyFileInput(b'{"response":{}}'),
+            )
+
+        self.assertEqual(resp["filename"], "main_testing.pptx")
+        compose_mock.assert_called_once_with(b"xlsx", b'{"response":{}}')
 
 
 if __name__ == "__main__":

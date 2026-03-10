@@ -8,19 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-from update_ppt import _flatten_text_payload, update_presentation
-from utils.slide1_charts import generate_slide1_charts
-from utils.slide2_charts import generate_slide2_charts
-from utils.slide3_charts import generate_slide3_charts
-from utils.slide_pizza_charts import generate_pizza_charts
-from utils.slide8_charts import generate_slide8_charts
-from utils.slide9_charts import generate_slide9_charts
-from utils.slide11_charts import generate_slide11_charts
-from utils.slide12_charts import generate_slide12_charts
-from utils.slide13_charts import generate_slide13_charts
-from utils.slide14_charts import generate_slide14_charts
-from utils.slide15_charts import generate_slide15_charts
-from utils.xlsx_text_fields import extract_xlsx_to_text_mapping, parse_text_fields_json
+from presentation_builder import build_presentation
 
 
 def _add_handler_if_missing(logger: logging.Logger, handler: logging.Handler) -> None:
@@ -97,22 +85,6 @@ def _load_job_config(repo_root: Path) -> Dict[str, Any]:
     return raw
 
 
-def _load_llm_mapping(repo_root: Path, cfg: Dict[str, Any]) -> Dict[str, str]:
-    llm_path = cfg.get("llm_response_json")
-    if not llm_path:
-        return {}
-
-    path = _resolve_path(repo_root, str(llm_path))
-    if not path.exists():
-        logging.warning("LLM response JSON não encontrado (ignorando): %s", str(path))
-        return {}
-
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(payload, dict) and "response" in payload and isinstance(payload["response"], dict):
-        payload = payload["response"]
-    return _flatten_text_payload(payload)
-
-
 def _call_analyze_api(*, api_url: str, xlsx_path: Path, cfg: Dict[str, Any]) -> object:
     """Call the deployed FastAPI endpoint with the XLSX as multipart.
 
@@ -184,7 +156,7 @@ def _maybe_fetch_llm_response(repo_root: Path, cfg: Dict[str, Any], xlsx_path: P
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Job fixo: recebe apenas o XLSX e atualiza o PPT usando configs em config/*.json.\n\n"
+            "Job fixo: recebe o XLSX e opcionalmente o JSON da LLM, atualizando o PPT usando configs em config/*.json.\n\n"
             "Você edita config/job_config.json e config/text_fields.json uma única vez."
         )
     )
@@ -205,7 +177,15 @@ def main() -> None:
     parser.add_argument(
         "--skip-charts",
         action="store_true",
-        help="Não gera os PNGs (01..07) antes de atualizar o PPT.",
+        help="Não gera os PNGs antes de atualizar o PPT.",
+    )
+    parser.add_argument(
+        "--llm-json",
+        default=None,
+        help=(
+            "Opcional: caminho do JSON já gerado pela LLM. "
+            "Quando informado, ele sobrescreve o llm_response_json configurado no job."
+        ),
     )
     args = parser.parse_args()
 
@@ -220,116 +200,30 @@ def main() -> None:
     if not xlsx_path.exists():
         raise FileNotFoundError(f"XLSX não encontrado: {xlsx_path}")
 
-    # If configured, fetch the LLM JSON from FastAPI automatically.
-    _maybe_fetch_llm_response(repo_root, cfg, xlsx_path)
+    llm_payload = None
+    if args.llm_json:
+        llm_json_path = Path(args.llm_json).expanduser().resolve()
+        if not llm_json_path.exists():
+            raise FileNotFoundError(f"JSON da LLM não encontrado: {llm_json_path}")
+        llm_payload = json.loads(llm_json_path.read_text(encoding="utf-8"))
+    else:
+        # If configured, fetch the LLM JSON from FastAPI automatically.
+        _maybe_fetch_llm_response(repo_root, cfg, xlsx_path)
 
-    pptx_template = _resolve_path(repo_root, str(cfg.get("pptx_template")))
-    pptx_output = _resolve_path(repo_root, str(cfg.get("pptx_output")))
-    images_dir = _resolve_path(repo_root, str(cfg.get("images_dir", ".")))
-    allow_placeholder_text = bool(cfg.get("allow_placeholder_text", False))
-
-    # Gera os gráficos (por slide) antes de atualizar o PPT.
-    if not bool(args.skip_charts):
-        logging.info("Gerando PNGs do slide 1 (01..04)...")
-        s1 = generate_slide1_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 1 gerou %d arquivos", len(s1))
-
-        logging.info("Gerando PNGs do slide 2 (05..07)...")
-        s2 = generate_slide2_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 2 gerou %d arquivos", len(s2))
-
-        logging.info("Gerando PNGs do slide 3 (08..09)...")
-        s3 = generate_slide3_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 3 gerou %d arquivos", len(s3))
-
-        logging.info("Gerando PNGs do slide 4 (10..12)...")
-        s4 = generate_pizza_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 4 gerou %d arquivos", len(s4))
-
-        logging.info("Gerando PNGs do slide 8 (13..14)...")
-        s8 = generate_slide8_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 8 gerou %d arquivos", len(s8))
-
-        logging.info("Gerando PNGs do slide 9 (19..21)...")
-        s9 = generate_slide9_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 9 gerou %d arquivos", len(s9))
-
-        logging.info("Gerando PNGs do slide 11 (22..24)...")
-        s11 = generate_slide11_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 11 gerou %d arquivos", len(s11))
-
-        logging.info("Gerando PNGs do slide 12 (25)...")
-        s12 = generate_slide12_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 12 gerou %d arquivos", len(s12))
-
-        logging.info("Gerando PNGs do slide 13 (26..29)...")
-        s13 = generate_slide13_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 13 gerou %d arquivos", len(s13))
-
-        logging.info("Gerando PNGs do slide 14 (30)...")
-        s14 = generate_slide14_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 14 gerou %d arquivos", len(s14))
-
-        logging.info("Gerando PNGs do slide 15 (31..32)...")
-        s15 = generate_slide15_charts(xlsx_path=xlsx_path, output_dir=images_dir)
-        logging.info("OK: slide 15 gerou %d arquivos", len(s15))
-
-    text_fields_config = _resolve_path(repo_root, str(cfg.get("text_fields_config", "config/text_fields.json")))
-
-    # XLSX-derived fields
-    default_sheet_from_config, specs = parse_text_fields_json(text_fields_config)
-    text_mapping = extract_xlsx_to_text_mapping(
-        xlsx_path,
-        specs,
-        default_sheet=default_sheet_from_config,
-    )
-
-    # LLM-derived fields (optional): merge selected keys only
-    raw_text_cfg = json.loads(text_fields_config.read_text(encoding="utf-8"))
-    llm_fields: list[str] = []
-    if isinstance(raw_text_cfg, dict):
-        lf = raw_text_cfg.get("llm_fields") or raw_text_cfg.get("from_llm")
-        if isinstance(lf, list):
-            llm_fields = [str(x) for x in lf]
-
-    llm_mapping = _load_llm_mapping(repo_root, cfg)
-    llm_keys_before_filter = set(llm_mapping.keys())
-    if llm_fields:
-        allowed = set(llm_fields)
-        llm_mapping = {k: v for k, v in llm_mapping.items() if k in allowed}
-        if llm_keys_before_filter and not llm_mapping:
-            sample_keys = ", ".join(sorted(list(llm_keys_before_filter))[:25])
-            logging.warning(
-                "Chaves vindas da LLM foram ignoradas por não baterem com llm_fields. "
-                "llm_fields=%s; chaves_disponiveis(amostra)=%s",
-                sorted(list(allowed)),
-                sample_keys,
-            )
-
-    # LLM overrides XLSX for same keys
-    text_mapping.update(llm_mapping)
-
-    (
-        replaced_pictures,
-        replaced_placeholders,
-        replaced_text,
-        _replaced_files,
-        _missing_files,
-        _applied_text_keys,
-    ) = update_presentation(
-        pptx_path=pptx_template,
-        output_path=pptx_output,
-        images_dir=images_dir,
-        allow_placeholder_text=allow_placeholder_text,
-        text_json=None,
-        text_payload=text_mapping,
+    result = build_presentation(
+        repo_root=repo_root,
+        cfg=cfg,
+        xlsx_path=xlsx_path,
+        llm_payload=llm_payload,
+        skip_charts=bool(args.skip_charts),
     )
 
     logging.info(
-        "OK: gerado %s (pictures=%d text=%d)",
-        str(pptx_output),
-        replaced_pictures,
-        replaced_text,
+        "OK: gerado %s (pictures=%d text=%d charts=%d)",
+        str(result.output_path),
+        result.replaced_pictures,
+        result.replaced_text,
+        result.generated_chart_count,
     )
 
 

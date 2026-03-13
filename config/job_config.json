@@ -4,10 +4,5 @@
   "images_dir": ".",
   "allow_placeholder_text": false,
   "text_fields_config": "config/text_fields.json",
-  "llm_response_json": "llm_response.latest.json",
-
-  "api_url": null,
-  "api_file_field": "file",
-  "api_timeout_seconds": 180,
-  "api_headers": {}
+  "llm_response_json": "llm_response.latest.json"
 }

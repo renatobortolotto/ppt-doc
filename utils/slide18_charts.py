@@ -39,11 +39,11 @@ def _plot_stacked_pct_bars(
     *,
     xlabels: list[str],
     series_names: list[str],
-    values: np.ndarray,   # shape [n_bars, n_series]
+    values: np.ndarray,
     output_path: Path,
     colors: list[str],
     bracket_pct: bool = True,
-    fmt_label=None,  # callable(float) -> str; defaults to _fmt_dec(v, 1)
+    fmt_label=None,
 ) -> None:
     """Barra empilhada com labels dentro de cada segmento e bracket no total."""
     import matplotlib.pyplot as plt
@@ -66,8 +66,7 @@ def _plot_stacked_pct_bars(
     for j in range(m):
         y = np.asarray(values[:, j], dtype=float)
         y_safe = np.where(np.isfinite(y), y, 0.0)
-        ax.bar(x, y_safe, width=width, bottom=bottom,
-               color=colors[j % len(colors)], edgecolor="none", zorder=2)
+        ax.bar(x, y_safe, width=width, bottom=bottom, color=colors[j % len(colors)], edgecolor="none", zorder=2)
 
         rgba = to_rgba(colors[j % len(colors)])
         lum = 0.2126 * rgba[0] + 0.7152 * rgba[1] + 0.0722 * rgba[2]
@@ -80,25 +79,29 @@ def _plot_stacked_pct_bars(
                 continue
             yc = float(bottom[i]) + v / 2.0
             segment_centers[j].append(yc)
-            ax.text(float(x[i]), yc, fmt_label(v),
-                    ha="center", va="center", fontsize=9.0,
-                    color=txt_color, zorder=4)
+            ax.text(float(x[i]), yc, fmt_label(v), ha="center", va="center", fontsize=9.0, color=txt_color, zorder=4)
 
         bottom = bottom + y_safe
 
     totals = bottom.copy()
 
-    # Total label above each bar
     total_tops: list[float] = []
     for i, total in enumerate(totals):
         y_lbl = float(total) + max(abs(float(total)) * 0.02, 0.3)
         total_tops.append(y_lbl)
-        ax.text(float(x[i]), y_lbl, fmt_label(total),
-                ha="center", va="bottom", fontsize=10.0,
-                fontweight="bold" if i == n - 1 else "normal",
-                color="#2f2f2f", zorder=5, clip_on=False)
+        ax.text(
+            float(x[i]),
+            y_lbl,
+            fmt_label(total),
+            ha="center",
+            va="bottom",
+            fontsize=10.0,
+            fontweight="bold" if i == n - 1 else "normal",
+            color="#2f2f2f",
+            zorder=5,
+            clip_on=False,
+        )
 
-    # Brackets between consecutive bars
     if n >= 2:
         abs_max = float(np.nanmax(np.abs(totals)))
         offset_y = max(abs_max * 0.12, 0.5)
@@ -118,28 +121,28 @@ def _plot_stacked_pct_bars(
                 lbl = f"{(curr - prev):+.1f} p.p.".replace(".", ",")
 
             x1, x2 = float(x[i - 1]), float(x[i])
-            ax.plot([x1, x1, x2, x2],
-                    [top_base, top_base + bracket_h, top_base + bracket_h, top_base],
-                    color="#2f2f2f", linewidth=1.2, zorder=4)
+            ax.plot(
+                [x1, x1, x2, x2],
+                [top_base, top_base + bracket_h, top_base + bracket_h, top_base],
+                color="#2f2f2f",
+                linewidth=1.2,
+                zorder=4,
+            )
             ty = top_base + bracket_h + offset_y * 0.25
-            ax.text((x1 + x2) / 2.0, ty, lbl,
-                    ha="center", va="bottom", fontsize=9.0, color="#2f2f2f", zorder=5)
+            ax.text((x1 + x2) / 2.0, ty, lbl, ha="center", va="bottom", fontsize=9.0, color="#2f2f2f", zorder=5)
             max_text_y = ty if max_text_y is None else max(max_text_y, ty)
 
         if max_text_y is not None:
             ymin, ymax = ax.get_ylim()
             ax.set_ylim(ymin, max(ymax, max_text_y + offset_y * 1.4))
 
-    # Inline legend on left
     x_leg = float(x.min()) - 0.95
     for j, name in enumerate(series_names):
         y_ref = next((yc for yc in segment_centers[j] if np.isfinite(yc)), float("nan"))
         if not np.isfinite(y_ref):
             continue
-        ax.scatter([x_leg], [y_ref], s=90.0, marker="s",
-                   color=colors[j % len(colors)], edgecolors="none", zorder=6)
-        ax.text(x_leg + 0.12, y_ref, str(name),
-                ha="left", va="center", fontsize=9.0, color="#2f2f2f", zorder=6, clip_on=False)
+        ax.scatter([x_leg], [y_ref], s=90.0, marker="s", color=colors[j % len(colors)], edgecolors="none", zorder=6)
+        ax.text(x_leg + 0.12, y_ref, str(name), ha="left", va="center", fontsize=9.0, color="#2f2f2f", zorder=6, clip_on=False)
 
     ax.set_xlim(float(x.min()) - 1.25, float(x.max()) + 0.65)
     ax.set_xticks(x)
@@ -182,10 +185,16 @@ def _plot_simple_bars(
         if not np.isfinite(v):
             continue
         ax.text(
-            rect.get_x() + rect.get_width() / 2, rect.get_height(),
-            fmt_label(v), ha="center", va="bottom", fontsize=10.0,
+            rect.get_x() + rect.get_width() / 2,
+            rect.get_height(),
+            fmt_label(v),
+            ha="center",
+            va="bottom",
+            fontsize=10.0,
             fontweight="bold" if i == n - 1 else "normal",
-            color="#2f2f2f", zorder=4, clip_on=False,
+            color="#2f2f2f",
+            zorder=4,
+            clip_on=False,
         )
 
     if n >= 2:
@@ -207,12 +216,15 @@ def _plot_simple_bars(
                 lbl = f"{(curr - prev):+.1f} p.p.".replace(".", ",")
 
             x1, x2 = float(x[i - 1]), float(x[i])
-            ax.plot([x1, x1, x2, x2],
-                    [top_base, top_base + bracket_h, top_base + bracket_h, top_base],
-                    color="#2f2f2f", linewidth=1.2, zorder=4)
+            ax.plot(
+                [x1, x1, x2, x2],
+                [top_base, top_base + bracket_h, top_base + bracket_h, top_base],
+                color="#2f2f2f",
+                linewidth=1.2,
+                zorder=4,
+            )
             ty = top_base + bracket_h + offset_y * 0.25
-            ax.text((x1 + x2) / 2.0, ty, lbl,
-                    ha="center", va="bottom", fontsize=9.0, color="#2f2f2f", zorder=5)
+            ax.text((x1 + x2) / 2.0, ty, lbl, ha="center", va="bottom", fontsize=9.0, color="#2f2f2f", zorder=5)
             max_text_y = ty if max_text_y is None else max(max_text_y, ty)
 
         if max_text_y is not None:
@@ -236,8 +248,8 @@ def _plot_simple_bars(
 
 def generate_slide18_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     """Slide 18:
-    - A3:D5 → 1 gráfico de barra empilhada (Outros Veiculos + Leves Usados), % labels, bracket %.
-    - I3:N4 → 2 gráficos separados: trimestral (J:L) e 9M (M:N), brackets em %.
+    - A3:D5 -> 1 grafico de barra empilhada (Outros Veiculos + Leves Usados), % labels, bracket %.
+    - I3:N4 -> 2 graficos separados: trimestral (J:L) e 9M (M:N), brackets em %.
     """
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -245,23 +257,21 @@ def generate_slide18_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     wb = load_workbook(filename=xlsx_path, data_only=True)
     sheet_name = "slide_18"
     if sheet_name not in wb.sheetnames:
-        raise ValueError(f"Aba não encontrada: {sheet_name!r}. Disponíveis: {wb.sheetnames}")
+        raise ValueError(f"Aba nao encontrada: {sheet_name!r}. Disponiveis: {wb.sheetnames}")
     ws = wb[sheet_name]
 
     generated: list[Path] = []
 
-    # ── Block A3:D5 – barra empilhada ───────────────────────────────────────
     labels_a = [("" if v is None else str(v)).strip() for v in _read_range_row(ws, "B3:D3")]
     series_names_a: list[str] = []
     rows_a: list[list[float]] = []
     for row in [4, 5]:
         raw = _read_range_row(ws, f"A{row}:D{row}")
         name = ("" if raw[0] is None else str(raw[0])).strip()
-        vals = [_to_float(v) for v in raw[1:]]  # B, C, D
+        vals = [_to_float(v) for v in raw[1:]]
         series_names_a.append(name)
         rows_a.append(vals)
 
-    # values shape: [n_bars=3, n_series=2]
     values_a = np.asarray(rows_a, dtype=float).T
 
     out33 = output_dir / "33_veiculos_empilhado.png"
@@ -275,12 +285,10 @@ def generate_slide18_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     )
     generated.append(out33)
 
-    # ── Block I3:N4 ─────────────────────────────────────────────────────────
     labels_i = [("" if v is None else str(v)).strip() for v in _read_range_row(ws, "J3:N3")]
     raw_i = _read_range_row(ws, "I4:N4")
-    vals_i = [_to_float(v) for v in raw_i[1:]]  # J, K, L, M, N
+    vals_i = [_to_float(v) for v in raw_i[1:]]
 
-    # 34 – Trimestral: J, K, L
     out34 = output_dir / "34_premios_seguros_trimestres.png"
     _plot_simple_bars(
         xlabels=labels_i[:3],
@@ -291,7 +299,6 @@ def generate_slide18_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     )
     generated.append(out34)
 
-    # 35 – 9M: M, N
     out35 = output_dir / "35_premios_seguros_9m.png"
     _plot_simple_bars(
         xlabels=labels_i[3:],
@@ -312,4 +319,4 @@ if __name__ == "__main__":
         files = generate_slide18_charts(xlsx_path=xlsx, output_dir=out)
         print(f"Gerados: {files}")
     else:
-        print(f"Arquivo {xlsx} não encontrado")
+        print(f"Arquivo {xlsx} nao encontrado")

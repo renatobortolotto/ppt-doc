@@ -66,13 +66,6 @@ def _configure_logging(level: str, *, log_file: str | None = None) -> None:
     logging.getLogger("PIL").setLevel(logging.WARNING)
 
 
-def _resolve_path(repo_root: Path, p: str) -> Path:
-    path = Path(p).expanduser()
-    if path.is_absolute():
-        return path
-    return (repo_root / path).resolve()
-
-
 def _load_job_config(repo_root: Path) -> Dict[str, Any]:
     cfg_path = repo_root / "config" / "job_config.json"
     if not cfg_path.exists():
@@ -83,74 +76,6 @@ def _load_job_config(repo_root: Path) -> Dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError("job_config.json deve ser um objeto")
     return raw
-
-
-def _call_analyze_api(*, api_url: str, xlsx_path: Path, cfg: Dict[str, Any]) -> object:
-    """Call the deployed FastAPI endpoint with the XLSX as multipart.
-
-    Returns the parsed JSON (already decoded).
-    """
-
-    try:
-        import requests  # type: ignore
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeError(
-            "Dependência 'requests' não instalada. Instale via requirements.txt."
-        ) from exc
-
-    field = str(cfg.get("api_file_field") or "file")
-    timeout = float(cfg.get("api_timeout_seconds") or 180)
-    headers = cfg.get("api_headers")
-    if headers is None:
-        headers = {}
-    if not isinstance(headers, dict):
-        raise ValueError("api_headers deve ser um objeto JSON")
-
-    content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    with xlsx_path.open("rb") as f:
-        files = {
-            field: (
-                xlsx_path.name,
-                f,
-                content_type,
-            )
-        }
-        logging.info("Chamando API: %s (field=%s)", api_url, field)
-        resp = requests.post(api_url, files=files, headers=headers, timeout=timeout)
-
-    if resp.status_code >= 400:
-        raise RuntimeError(
-            f"API retornou {resp.status_code}: {resp.text[:2000]}"
-        )
-
-    try:
-        return resp.json()
-    except Exception as exc:
-        raise RuntimeError(
-            f"API não retornou JSON válido. Body (parcial): {resp.text[:2000]}"
-        ) from exc
-
-
-def _maybe_fetch_llm_response(repo_root: Path, cfg: Dict[str, Any], xlsx_path: Path) -> None:
-    """If api_url is configured, call the API and persist JSON to llm_response_json."""
-
-    api_url = cfg.get("api_url")
-    if not api_url:
-        return
-
-    api_url_s = str(api_url)
-    payload = _call_analyze_api(api_url=api_url_s, xlsx_path=xlsx_path, cfg=cfg)
-
-    out_path = cfg.get("llm_response_json")
-    if not out_path:
-        raise ValueError("Para usar api_url, configure também llm_response_json")
-
-    out = _resolve_path(repo_root, str(out_path))
-    out.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    logging.info("Resposta da API salva em: %s", str(out))
 
 
 def main() -> None:
@@ -184,7 +109,7 @@ def main() -> None:
         default=None,
         help=(
             "Opcional: caminho do JSON já gerado pela LLM. "
-            "Quando informado, ele sobrescreve o llm_response_json configurado no job."
+            "Quando omitido, o runner usa o llm_response_json configurado no job."
         ),
     )
     args = parser.parse_args()
@@ -206,9 +131,6 @@ def main() -> None:
         if not llm_json_path.exists():
             raise FileNotFoundError(f"JSON da LLM não encontrado: {llm_json_path}")
         llm_payload = json.loads(llm_json_path.read_text(encoding="utf-8"))
-    else:
-        # If configured, fetch the LLM JSON from FastAPI automatically.
-        _maybe_fetch_llm_response(repo_root, cfg, xlsx_path)
 
     result = build_presentation(
         repo_root=repo_root,

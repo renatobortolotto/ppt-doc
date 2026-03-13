@@ -12,7 +12,9 @@ from utils.slide12_charts import generate_slide12_charts
 from utils.slide13_charts import generate_slide13_charts
 from utils.slide14_charts import generate_slide14_charts
 from utils.slide15_charts import generate_slide15_charts
+from utils.slide18_charts import generate_slide18_charts
 from utils.slide1_charts import generate_slide1_charts
+from utils.slide20_charts import generate_slide20_charts
 from utils.slide2_charts import generate_slide2_charts
 from utils.slide3_charts import generate_slide3_charts
 from utils.slide8_charts import generate_slide8_charts
@@ -121,6 +123,8 @@ def _chart_generators() -> Sequence:
         generate_slide13_charts,
         generate_slide14_charts,
         generate_slide15_charts,
+        generate_slide18_charts,
+        generate_slide20_charts,
     )
 
 

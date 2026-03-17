@@ -20,6 +20,7 @@ from utils.slide3_charts import generate_slide3_charts
 from utils.slide8_charts import generate_slide8_charts
 from utils.slide9_charts import generate_slide9_charts
 from utils.slide_pizza_charts import generate_pizza_charts
+from utils.xlsx_extract import _load_workbook as _load_validated_workbook
 from utils.xlsx_text_fields import extract_xlsx_to_text_mapping, parse_text_fields_json
 
 
@@ -135,6 +136,20 @@ def generate_chart_assets(*, xlsx_path: Path, images_dir: Path) -> int:
     return generated
 
 
+def _validate_xlsx_path(xlsx_path: Path) -> None:
+    try:
+        wb = _load_validated_workbook(filename=xlsx_path, data_only=True)
+    except ValueError as exc:
+        raise ValueError(
+            f"Arquivo Excel invalido: {xlsx_path}. "
+            "Verifique se o arquivo e um .xlsx real do Excel, nao um .xls/.csv renomeado, HTML baixado da web, ou arquivo corrompido."
+        ) from exc
+
+    close = getattr(wb, "close", None)
+    if callable(close):
+        close()
+
+
 def build_presentation(
     *,
     repo_root: Path,
@@ -147,6 +162,8 @@ def build_presentation(
 ) -> BuildPresentationResult:
     if not xlsx_path.exists():
         raise FileNotFoundError(f"XLSX nao encontrado: {xlsx_path}")
+
+    _validate_xlsx_path(xlsx_path)
 
     effective_output_path = output_path or resolve_path(repo_root, str(cfg.get("pptx_output")))
     effective_images_dir = images_dir or resolve_path(repo_root, str(cfg.get("images_dir", ".")))

@@ -53,12 +53,28 @@ cd /home/renato/projetos/double-projects/ppt-doc
 MPLCONFIGDIR=/tmp/matplotlib ./.venv/bin/python run_fixed_job.py --xlsx testing.xlsx --llm-json llm_response.latest.json
 ```
 
+No Windows/PowerShell, use o Python da virtualenv assim:
+
+```powershell
+cd C:\caminho\para\ppt-doc
+.\.venv\Scripts\python.exe run_fixed_job.py --xlsx testing.xlsx --llm-json llm_response.latest.json
+```
+
+Se a virtualenv ja estiver ativada, `python run_fixed_job.py ...` tambem funciona.
+
 Exemplo usando o JSON configurado em `config/job_config.json`:
 
 ```bash
 cd /home/renato/projetos/double-projects/ppt-doc
 MPLCONFIGDIR=/tmp/matplotlib ./.venv/bin/python run_fixed_job.py --xlsx /caminho/para/arquivo.xlsx
 ```
+
+Se aparecer erro como `BadZipFile: File is not a zip file`, o arquivo informado em `--xlsx` nao e um `.xlsx` valido. Isso costuma acontecer quando o arquivo:
+
+- foi renomeado para `.xlsx`, mas originalmente era `.xls`, `.csv` ou `.html`
+- foi baixado de algum portal e salvo como pagina web
+- esta corrompido
+- e um arquivo temporario/incompleto
 
 Com a config atual:
 

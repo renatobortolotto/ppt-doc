@@ -60,28 +60,44 @@ class TestPresentationBuilder(unittest.TestCase):
     def test_build_presentation_passes_text_payload_to_update(self):
         fake_result = (3, 0, 2, [], [], ["slide1_title", "slide1_subtitle"])
         with patch(
-            "presentation_builder.generate_chart_assets",
-            return_value=11,
-        ):
+            "presentation_builder._load_validated_workbook",
+        ) as load_workbook_mock:
+            load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
             with patch(
-                "presentation_builder.build_text_mapping",
-                return_value={"slide1_title": "Titulo"},
+                "presentation_builder.generate_chart_assets",
+                return_value=11,
             ):
                 with patch(
-                    "presentation_builder.update_presentation",
-                    return_value=fake_result,
-                ) as update_mock:
-                    result = build_presentation(
-                        repo_root=self.repo_root,
-                        cfg=self.cfg,
-                        xlsx_path=self.repo_root / "testing.xlsx",
-                        llm_payload={"response": {"titles": {"slide1_title": "Titulo"}}},
-                    )
+                    "presentation_builder.build_text_mapping",
+                    return_value={"slide1_title": "Titulo"},
+                ):
+                    with patch(
+                        "presentation_builder.update_presentation",
+                        return_value=fake_result,
+                    ) as update_mock:
+                        result = build_presentation(
+                            repo_root=self.repo_root,
+                            cfg=self.cfg,
+                            xlsx_path=self.repo_root / "testing.xlsx",
+                            llm_payload={"response": {"titles": {"slide1_title": "Titulo"}}},
+                        )
 
         self.assertEqual(result.generated_chart_count, 11)
         self.assertEqual(result.replaced_pictures, 3)
         self.assertEqual(result.replaced_text, 2)
         update_mock.assert_called_once()
+
+    def test_build_presentation_raises_clear_error_for_invalid_xlsx(self):
+        with patch(
+            "presentation_builder._load_validated_workbook",
+            side_effect=ValueError("Arquivo enviado não é um XLSX válido"),
+        ):
+            with self.assertRaisesRegex(ValueError, "Arquivo Excel invalido"):
+                build_presentation(
+                    repo_root=self.repo_root,
+                    cfg=self.cfg,
+                    xlsx_path=self.repo_root / "testing.xlsx",
+                )
 
 
 if __name__ == "__main__":

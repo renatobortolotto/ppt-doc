@@ -14,9 +14,9 @@ from utils.slide13_charts import generate_slide13_charts
 from utils.slide14_charts import generate_slide14_charts
 from utils.slide15_charts import generate_slide15_charts
 from utils.slide18_charts import generate_slide18_charts
-from utils.slide1_charts import generate_slide1_charts
+from utils.slide10_charts import generate_slide10_charts
 from utils.slide20_charts import generate_slide20_charts
-from utils.slide2_charts import generate_slide2_charts
+from utils.slide7_charts import generate_slide7_charts
 from utils.slide3_charts import generate_slide3_charts
 from utils.slide8_charts import generate_slide8_charts
 from utils.slide9_charts import generate_slide9_charts
@@ -167,9 +167,9 @@ def build_text_mapping_with_failures(
 def _chart_generators() -> Sequence[ChartGeneratorSpec]:
     return (
         ChartGeneratorSpec(
-            key="slide1",
-            label="slide 1",
-            generator=generate_slide1_charts,
+            key="slide7",
+            label="slide 7",
+            generator=generate_slide7_charts,
             output_files=(
                 "01_lucro_trimestres.png",
                 "02_lucro_9m.png",
@@ -178,9 +178,9 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             ),
         ),
         ChartGeneratorSpec(
-            key="slide2",
-            label="slide 2",
-            generator=generate_slide2_charts,
+            key="slide10",
+            label="slide 10",
+            generator=generate_slide10_charts,
             output_files=(
                 "05_qualidade_varejo_veiculos.png",
                 "06_qualidade_total.png",

@@ -91,6 +91,10 @@ class ExcelBarChartSpec:
     fixed_slot_count: Optional[int] = None
     # Optional: format bar-top values with decimals (None keeps existing 0-decimal format)
     value_decimals: Optional[int] = None
+    # Optional: scale numeric values before plotting (e.g. 0.001 for "em milhares")
+    value_scale: float = 1.0
+    # Optional: render decimal labels with comma instead of dot.
+    value_decimal_comma: bool = False
     # Optional: multiply computed bar width (e.g. 0.70 for 30% thinner)
     bar_width_scale: float = 1.0
     # Optional: scale all font sizes (e.g. 1.5 to increase by ~50%)
@@ -246,6 +250,13 @@ def plot_bar_from_excel(spec: ExcelBarChartSpec) -> Tuple[plt.Figure, plt.Axes]:
     ws = wb[spec.sheet_name]
 
     values = to_float_list(_read_range_row(ws, spec.values_range))
+    try:
+        value_scale = float(spec.value_scale)
+    except Exception:
+        value_scale = 1.0
+    if not np.isfinite(value_scale):
+        value_scale = 1.0
+    values = [float(v) * value_scale for v in values]
     xlabels = ["" if v is None else str(v) for v in _read_range_row(ws, spec.xlabels_range)]
 
     if len(values) != len(xlabels):
@@ -306,8 +317,9 @@ def plot_bar_from_excel(spec: ExcelBarChartSpec) -> Tuple[plt.Figure, plt.Axes]:
             value_label = f"{val:,.0f}".replace(",", ".")
         else:
             dec = max(0, int(spec.value_decimals))
-            # Requested formatting for some charts: X.X using dot as decimal separator.
             value_label = f"{float(val):.{dec}f}"
+            if spec.value_decimal_comma:
+                value_label = value_label.replace(".", ",")
         ax.text(
             rect.get_x() + rect.get_width() / 2,
             rect.get_height(),

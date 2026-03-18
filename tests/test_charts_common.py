@@ -5,7 +5,7 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from utils.charts_common import close_figure, plot_line_from_excel, to_float_list
+from utils.charts_common import ExcelBarChartSpec, close_figure, plot_bar_from_excel, plot_line_from_excel, to_float_list
 
 
 class TestChartsCommon(unittest.TestCase):
@@ -56,6 +56,40 @@ class TestChartsCommon(unittest.TestCase):
             try:
                 labels = [t.get_text() for t in ax.texts]
                 self.assertEqual(labels, ["9,0%", "12,0%"])
+            finally:
+                close_figure(fig)
+
+    def test_plot_bar_value_scale_and_comma_decimal_labels(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "S"
+
+        ws["A1"].value = 8820
+        ws["B1"].value = 9100
+        ws["A2"].value = "T1"
+        ws["B2"].value = "T2"
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            xlsx_path = td_path / "t.xlsx"
+            out_path = td_path / "out.png"
+            wb.save(xlsx_path)
+
+            fig, ax = plot_bar_from_excel(
+                ExcelBarChartSpec(
+                    file_path=xlsx_path,
+                    sheet_name="S",
+                    values_range="A1:B1",
+                    xlabels_range="A2:B2",
+                    output_path=out_path,
+                    value_decimals=1,
+                    value_scale=0.001,
+                    value_decimal_comma=True,
+                )
+            )
+            try:
+                labels = [t.get_text() for t in ax.texts]
+                self.assertEqual(labels, ["8,8", "9,1"])
             finally:
                 close_figure(fig)
 

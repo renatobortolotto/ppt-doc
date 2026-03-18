@@ -153,8 +153,8 @@ class TestPresentationBuilder(unittest.TestCase):
         fake_result = (3, 0, 2, [], [], ["slide1_title"])
         chart_failures = (
             ChartGenerationFailure(
-                generator_key="slide1",
-                label="slide 1",
+                generator_key="slide7",
+                label="slide 7",
                 output_files=("01_lucro_trimestres.png", "02_lucro_9m.png"),
                 error="Valor nao numerico",
             ),

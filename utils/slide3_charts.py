@@ -38,7 +38,7 @@ def _is_total_row(label: str) -> bool:
 
 def _fmt_number(v: float, *, decimals: int = 1) -> str:
     try:
-        return f"{float(v):.{int(decimals)}f}"
+        return f"{float(v):.{int(decimals)}f}".replace(".", ",")
     except Exception:
         return str(v)
 
@@ -47,6 +47,15 @@ def _text_color_for_bg_rgba(rgba) -> str:
     r, g, b = float(rgba[0]), float(rgba[1]), float(rgba[2])
     lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
     return "#ffffff" if lum < 0.50 else "#2f2f2f"
+
+
+def _scale_rows(rows: list[tuple[str, list[float]]], *, divisor: float) -> list[tuple[str, list[float]]]:
+    if not divisor:
+        return rows
+    scaled: list[tuple[str, list[float]]] = []
+    for label, vals in rows:
+        scaled.append((label, [float(v) / float(divisor) for v in vals]))
+    return scaled
 
 
 def _read_emprestimos_table(*, xlsx_path: Path):
@@ -224,7 +233,7 @@ def plot_emprestimos_stacked(
             if not np.isfinite(prev) or not np.isfinite(curr) or prev == 0:
                 continue
             pct = (curr / prev - 1.0) * 100.0
-            label = f"{pct:+.1f}%"
+            label = f"{pct:+.1f}%".replace(".", ",")
 
             x1 = float(x[i - 1])
             x2 = float(x[i])
@@ -304,6 +313,7 @@ def generate_slide3_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     # 08) Empréstimos - Empilhado
     xlabels, rows = _read_emprestimos_table(xlsx_path=xlsx_path)
     rows2 = _combine_consignado_demais(rows)
+    rows2 = _scale_rows(rows2, divisor=1000.0)
     out08 = output_dir / "08_emprestimos_empilhado.png"
     plot_emprestimos_stacked(
         xlabels=xlabels,
@@ -332,6 +342,8 @@ def generate_slide3_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
             show_delta_pct=True,
             show_delta_bracket=True,
             value_decimals=1,
+            value_scale=0.001,
+            value_decimal_comma=True,
             bar_width_scale=0.70,
             font_scale=1.5,
             output_path=out09,

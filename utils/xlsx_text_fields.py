@@ -18,6 +18,8 @@ class TextFieldSpec:
     a1_range: str
     sheet: Optional[str] = None
     div: Optional[float] = None
+    round: Optional[int] = None
+    is_porc: bool = False
 
 
 @dataclass(frozen=True)
@@ -54,6 +56,30 @@ def _parse_divisor(raw_value: Any, *, field_id: str) -> Optional[float]:
     return divisor
 
 
+def _parse_round_digits(raw_value: Any, *, field_id: str) -> Optional[int]:
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, bool):
+        raise ValueError(f"Campo {field_id!r} tem round invalido: {raw_value!r}")
+    if isinstance(raw_value, float) and not raw_value.is_integer():
+        raise ValueError(f"Campo {field_id!r} tem round invalido: {raw_value!r}")
+    try:
+        round_digits = int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Campo {field_id!r} tem round invalido: {raw_value!r}") from exc
+    if round_digits < 0:
+        raise ValueError(f"Campo {field_id!r} tem round invalido: {raw_value!r}")
+    return round_digits
+
+
+def _parse_bool_flag(raw_value: Any, *, field_id: str, field_name: str) -> bool:
+    if raw_value is None:
+        return False
+    if isinstance(raw_value, bool):
+        return raw_value
+    raise ValueError(f"Campo {field_id!r} tem {field_name} invalido: {raw_value!r}")
+
+
 def _apply_divisor_to_value(value: Any, *, divisor: Optional[float]) -> Any:
     if divisor is None or value is None:
         return value
@@ -64,6 +90,87 @@ def _apply_divisor_to_value(value: Any, *, divisor: Optional[float]) -> Any:
     if isinstance(value, (int, float)):
         return float(value) / float(divisor)
     return value
+
+
+def _apply_round_to_value(value: Any, *, round_digits: Optional[int]) -> Any:
+    if round_digits is None or value is None:
+        return value
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+        if not math.isfinite(numeric):
+            return value
+        return format(numeric, f".{round_digits}f")
+    return value
+
+
+def _format_extracted_value(
+    value: Any,
+    *,
+    divisor: Optional[float],
+    round_digits: Optional[int],
+) -> str:
+    value = _apply_divisor_to_value(value, divisor=divisor)
+    value = _apply_round_to_value(value, round_digits=round_digits)
+    return _coerce_cell_value_to_str(value)
+
+
+def _cell_is_percent_formatted(cell) -> bool:
+    try:
+        fmt = cell.number_format
+    except Exception:
+        return False
+    if not fmt:
+        return False
+    return "%" in str(fmt)
+
+
+def _format_percent_display(cell) -> str:
+    raw_value = getattr(cell, "value", None)
+    if raw_value is None:
+        return ""
+    if isinstance(raw_value, str):
+        return raw_value.strip()
+    if isinstance(raw_value, bool):
+        return str(raw_value)
+    if not isinstance(raw_value, (int, float)):
+        return _coerce_cell_value_to_str(raw_value)
+
+    if not _cell_is_percent_formatted(cell):
+        return _coerce_cell_value_to_str(raw_value)
+
+    fmt = str(getattr(cell, "number_format", "") or "")
+    positive_fmt = fmt.split(";", 1)[0]
+
+    decimals = 0
+    decimal_sep = "."
+    marker = positive_fmt.find("%")
+    if marker >= 0:
+        numeric_fmt = positive_fmt[:marker]
+        last_dot = numeric_fmt.rfind(".")
+        last_comma = numeric_fmt.rfind(",")
+        sep_pos = max(last_dot, last_comma)
+        if sep_pos >= 0:
+            decimal_sep = numeric_fmt[sep_pos]
+            decimals = sum(ch in {"0", "#"} for ch in numeric_fmt[sep_pos + 1 :])
+
+    pct_value = float(raw_value) * 100.0
+    rendered = format(pct_value, f".{decimals}f")
+    if decimal_sep == ",":
+        rendered = rendered.replace(".", ",")
+    return f"{rendered}%"
+
+
+def _iter_cells_in_range(ws, a1_range: str) -> List[Any]:
+    min_col, min_row, max_col, max_row = xlsx_extract._range_boundaries(a1_range)
+    out: List[Any] = []
+    for row in range(min_row, max_row + 1):
+        for col in range(min_col, max_col + 1):
+            out.append(ws.cell(row=row, column=col))
+    return out
 
 
 def parse_text_fields_json(path: Union[str, Path]) -> tuple[Optional[str], List[TextFieldSpec]]:
@@ -112,6 +219,8 @@ def parse_text_fields_json(path: Union[str, Path]) -> tuple[Optional[str], List[
                     a1_range=str(a1),
                     sheet=str(sheet) if sheet else None,
                     div=_parse_divisor(item.get("div"), field_id=str(field_id)),
+                    round=_parse_round_digits(item.get("round"), field_id=str(field_id)),
+                    is_porc=_parse_bool_flag(item.get("is_porc"), field_id=str(field_id), field_name="is_porc"),
                 )
             )
 
@@ -140,6 +249,8 @@ def parse_text_fields_json(path: Union[str, Path]) -> tuple[Optional[str], List[
                     a1_range=str(a1),
                     sheet=str(sheet) if sheet else None,
                     div=_parse_divisor(value.get("div"), field_id=str(key)),
+                    round=_parse_round_digits(value.get("round"), field_id=str(key)),
+                    is_porc=_parse_bool_flag(value.get("is_porc"), field_id=str(key), field_name="is_porc"),
                 )
             )
             continue
@@ -165,13 +276,18 @@ def _extract_text_value_for_spec(
         )
 
     ws = wb[sheet_name]
-    values_2d = xlsx_extract._read_range_2d(ws, spec.a1_range)
-    values_1d = xlsx_extract._to_1d(values_2d)
+    cells = _iter_cells_in_range(ws, spec.a1_range)
     pieces = [
-        _coerce_cell_value_to_str(
-            _apply_divisor_to_value(v, divisor=spec.div)
+        (
+            _format_percent_display(cell)
+            if spec.is_porc
+            else _format_extracted_value(
+                cell.value,
+                divisor=spec.div,
+                round_digits=spec.round,
+            )
         )
-        for v in values_1d
+        for cell in cells
     ]
 
     if not pieces:
@@ -261,12 +377,19 @@ def _apply_var_formula_fallback(
 
         ws = wb_formula[sheet_name]
         v = ws.cell(row=min_row, column=min_col).value
+        cell = ws.cell(row=min_row, column=min_col)
         if v is None:
             continue
         if isinstance(v, str) and v.strip().startswith("="):
             continue
-        out[spec.id] = _coerce_cell_value_to_str(
-            _apply_divisor_to_value(v, divisor=spec.div)
+        out[spec.id] = (
+            _format_percent_display(cell)
+            if spec.is_porc
+            else _format_extracted_value(
+                v,
+                divisor=spec.div,
+                round_digits=spec.round,
+            )
         )
 
 

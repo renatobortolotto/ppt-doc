@@ -15,8 +15,9 @@ from utils.xlsx_text_fields import (
 
 
 class _FakeCell:
-    def __init__(self, value):
+    def __init__(self, value, *, number_format: str = "General"):
         self.value = value
+        self.number_format = number_format
 
 
 class _FakeWorksheet:
@@ -24,7 +25,11 @@ class _FakeWorksheet:
         self._values_by_rowcol = dict(values_by_rowcol)
 
     def cell(self, row: int, column: int):
-        return _FakeCell(self._values_by_rowcol.get((row, column)))
+        raw = self._values_by_rowcol.get((row, column))
+        if isinstance(raw, tuple):
+            value, number_format = raw
+            return _FakeCell(value, number_format=number_format)
+        return _FakeCell(raw)
 
 
 class _FakeWorkbook:
@@ -48,9 +53,11 @@ def _fake_workbook() -> _FakeWorkbook:
         # Range C3:D3
         (3, 3): "A",
         (3, 4): "B",
+        # E5
+        (5, 5): (0.099, "0,0%"),
     }
     ws = _FakeWorksheet(values)
-    ws2 = _FakeWorksheet({(2, 2): 9.99})
+    ws2 = _FakeWorksheet({(2, 2): 9.99, (3, 2): 9})
     return _FakeWorkbook({"DRE Saida": ws, "Premissas": ws2})
 
 
@@ -58,7 +65,7 @@ class TestXlsxTextFields(unittest.TestCase):
     def test_parse_text_fields_object_format(self):
         payload = {
             "default_sheet": "DRE Saida",
-            "fields": {"ROE_RECORRENTE": "K20", "X": {"cell": "B2", "div": 1000}},
+            "fields": {"ROE_RECORRENTE": "K20", "X": {"cell": "B2", "div": 1000, "round": 1, "is_porc": True}},
         }
 
         with tempfile.TemporaryDirectory() as td:
@@ -72,7 +79,11 @@ class TestXlsxTextFields(unittest.TestCase):
         self.assertEqual(specs[0].id, "ROE_RECORRENTE")
         self.assertEqual(specs[0].a1_range, "K20")
         self.assertIsNone(specs[0].div)
+        self.assertIsNone(specs[0].round)
+        self.assertFalse(specs[0].is_porc)
         self.assertEqual(specs[1].div, 1000.0)
+        self.assertEqual(specs[1].round, 1)
+        self.assertTrue(specs[1].is_porc)
 
     def test_extract_workbook_text_mapping_single_cell_and_range(self):
         specs = [
@@ -95,6 +106,28 @@ class TestXlsxTextFields(unittest.TestCase):
         out = extract_workbook_text_mapping(_fake_workbook(), specs, default_sheet=None)
 
         self.assertEqual(out["EM_MILHARES"], "8.82")
+
+    def test_extract_workbook_text_mapping_applies_optional_round_after_divisor(self):
+        specs = [
+            TextFieldSpec(id="EM_MILHARES_ARRED", a1_range="D4", sheet="DRE Saida", div=1000, round=1),
+            TextFieldSpec(id="FIXED_DECIMALS", a1_range="B3", sheet="Premissas", round=2),
+        ]
+
+        out = extract_workbook_text_mapping(_fake_workbook(), specs, default_sheet=None)
+
+        self.assertEqual(out["EM_MILHARES_ARRED"], "8.8")
+        self.assertEqual(out["FIXED_DECIMALS"], "9.00")
+
+    def test_extract_workbook_text_mapping_preserves_percent_display_when_is_porc(self):
+        specs = [
+            TextFieldSpec(id="ROE_DISPLAY", a1_range="E5", sheet="DRE Saida", is_porc=True),
+            TextFieldSpec(id="ROE_RAW", a1_range="E5", sheet="DRE Saida"),
+        ]
+
+        out = extract_workbook_text_mapping(_fake_workbook(), specs, default_sheet=None)
+
+        self.assertEqual(out["ROE_DISPLAY"], "9,9%")
+        self.assertEqual(out["ROE_RAW"], "0.099")
 
     def test_extract_workbook_text_mapping_sheet_override(self):
         specs = [

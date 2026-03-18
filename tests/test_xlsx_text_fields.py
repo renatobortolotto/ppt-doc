@@ -138,18 +138,20 @@ class TestXlsxTextFields(unittest.TestCase):
         self.assertEqual(out["ROE_DISPLAY"], "9,9%")
         self.assertEqual(out["ROE_RAW"], "0.099")
 
-    def test_extract_workbook_text_mapping_preserves_pp_display_when_is_pp(self):
+    def test_extract_workbook_text_mapping_returns_numeric_value_when_is_pp(self):
         specs = [
-            TextFieldSpec(id="PP_DISPLAY", a1_range="F6", sheet="DRE Saida", is_pp=True),
+            TextFieldSpec(id="PP_NUMERIC", a1_range="F6", sheet="DRE Saida", is_pp=True),
+            TextFieldSpec(id="PP_NUMERIC_ROUND", a1_range="F6", sheet="DRE Saida", is_pp=True, round=1),
             TextFieldSpec(id="PP_RAW", a1_range="F6", sheet="DRE Saida"),
-            TextFieldSpec(id="PP_NEG_DISPLAY", a1_range="G7", sheet="DRE Saida", is_pp=True),
+            TextFieldSpec(id="PP_NEG_NUMERIC", a1_range="G7", sheet="DRE Saida", is_pp=True, round=1),
         ]
 
         out = extract_workbook_text_mapping(_fake_workbook(), specs, default_sheet=None)
 
-        self.assertEqual(out["PP_DISPLAY"], "0,1p.p.")
+        self.assertEqual(out["PP_NUMERIC"], "0.139")
+        self.assertEqual(out["PP_NUMERIC_ROUND"], "0.1")
         self.assertEqual(out["PP_RAW"], "0.139")
-        self.assertEqual(out["PP_NEG_DISPLAY"], "-0,9 p.p.")
+        self.assertEqual(out["PP_NEG_NUMERIC"], "-0.9")
 
     def test_extract_workbook_text_mapping_sheet_override(self):
         specs = [

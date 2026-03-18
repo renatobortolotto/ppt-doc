@@ -6,6 +6,8 @@ import importlib.util
 from pathlib import Path
 from unittest.mock import patch
 
+from presentation_builder import ChartGenerationFailure, TextFieldFailure
+
 
 class DummyFileInput:
     def __init__(self, content: bytes):
@@ -54,6 +56,22 @@ class TestMainFramework(unittest.TestCase):
             replaced_placeholders=0,
             replaced_text=2,
             generated_chart_count=11,
+            chart_failures=(
+                ChartGenerationFailure(
+                    generator_key="slide1",
+                    label="slide 1",
+                    output_files=("01_lucro_trimestres.png",),
+                    error="Valor nao numerico",
+                ),
+            ),
+            text_field_failures=(
+                TextFieldFailure(
+                    field_id="ROE_RECORRENTE",
+                    sheet="DRE Saida",
+                    a1_range="K20",
+                    error="Aba nao encontrada",
+                ),
+            ),
             applied_text_keys=("slide1_title",),
         )
         with patch(
@@ -71,6 +89,10 @@ class TestMainFramework(unittest.TestCase):
 
         self.assertEqual(resp["filename"], "main_testing.pptx")
         self.assertEqual(resp["summary"]["replacedPictures"], 3)
+        self.assertEqual(resp["summary"]["chartFailureCount"], 1)
+        self.assertEqual(resp["summary"]["chartFailures"][0]["generatorKey"], "slide1")
+        self.assertEqual(resp["summary"]["textFieldFailureCount"], 1)
+        self.assertEqual(resp["summary"]["textFieldFailures"][0]["fieldId"], "ROE_RECORRENTE")
         self.assertTrue(resp["pptxBase64"])
 
     def test_compose_presentation_files_invalid_json(self):

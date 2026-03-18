@@ -18,6 +18,20 @@ class TextFieldSpec:
     sheet: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class TextFieldFailure:
+    field_id: str
+    sheet: Optional[str]
+    a1_range: str
+    error: str
+
+
+@dataclass(frozen=True)
+class TextFieldExtractionResult:
+    mapping: Dict[str, str]
+    failures: tuple[TextFieldFailure, ...]
+
+
 def _coerce_cell_value_to_str(value: Any) -> str:
     if value is None:
         return ""
@@ -94,6 +108,36 @@ def parse_text_fields_json(path: Union[str, Path]) -> tuple[Optional[str], List[
     return str(default_sheet) if default_sheet else None, specs
 
 
+def _extract_text_value_for_spec(
+    wb,
+    spec: TextFieldSpec,
+    *,
+    default_sheet: Optional[str] = None,
+) -> tuple[str, str]:
+    sheet_name = spec.sheet or default_sheet
+    if not sheet_name:
+        raise ValueError(
+            f"Spec {spec.id!r} não tem sheet e nenhum default_sheet foi informado"
+        )
+    if sheet_name not in wb.sheetnames:
+        raise ValueError(
+            f"Aba não encontrada: {sheet_name!r} (spec={spec.id!r}). Disponíveis: {wb.sheetnames}"
+        )
+
+    ws = wb[sheet_name]
+    values_2d = xlsx_extract._read_range_2d(ws, spec.a1_range)
+    values_1d = xlsx_extract._to_1d(values_2d)
+    pieces = [_coerce_cell_value_to_str(v) for v in values_1d]
+
+    if not pieces:
+        return sheet_name, ""
+    if len(pieces) == 1:
+        return sheet_name, pieces[0]
+
+    non_empty = [p for p in pieces if p != ""]
+    return sheet_name, ", ".join(non_empty) if non_empty else ""
+
+
 def extract_workbook_text_mapping(
     wb,
     specs: Sequence[TextFieldSpec],
@@ -103,31 +147,80 @@ def extract_workbook_text_mapping(
     out: Dict[str, str] = {}
 
     for spec in specs:
-        sheet_name = spec.sheet or default_sheet
-        if not sheet_name:
-            raise ValueError(
-                f"Spec {spec.id!r} não tem sheet e nenhum default_sheet foi informado"
-            )
-        if sheet_name not in wb.sheetnames:
-            raise ValueError(
-                f"Aba não encontrada: {sheet_name!r} (spec={spec.id!r}). Disponíveis: {wb.sheetnames}"
-            )
-
-        ws = wb[sheet_name]
-        values_2d = xlsx_extract._read_range_2d(ws, spec.a1_range)
-        values_1d = xlsx_extract._to_1d(values_2d)
-        pieces = [_coerce_cell_value_to_str(v) for v in values_1d]
-
-        # If a range produces multiple cells, join with ", ".
-        if not pieces:
-            out[spec.id] = ""
-        elif len(pieces) == 1:
-            out[spec.id] = pieces[0]
-        else:
-            non_empty = [p for p in pieces if p != ""]
-            out[spec.id] = ", ".join(non_empty) if non_empty else ""
+        _sheet_name, value = _extract_text_value_for_spec(
+            wb,
+            spec,
+            default_sheet=default_sheet,
+        )
+        out[spec.id] = value
 
     return out
+
+
+def extract_workbook_text_mapping_tolerant(
+    wb,
+    specs: Sequence[TextFieldSpec],
+    *,
+    default_sheet: Optional[str] = None,
+) -> TextFieldExtractionResult:
+    out: Dict[str, str] = {}
+    failures: List[TextFieldFailure] = []
+
+    for spec in specs:
+        try:
+            sheet_name, value = _extract_text_value_for_spec(
+                wb,
+                spec,
+                default_sheet=default_sheet,
+            )
+            out[spec.id] = value
+        except Exception as exc:
+            failures.append(
+                TextFieldFailure(
+                    field_id=spec.id,
+                    sheet=spec.sheet or default_sheet,
+                    a1_range=spec.a1_range,
+                    error=str(exc),
+                )
+            )
+
+    return TextFieldExtractionResult(
+        mapping=out,
+        failures=tuple(failures),
+    )
+
+
+def _apply_var_formula_fallback(
+    wb_formula,
+    specs: Sequence[TextFieldSpec],
+    out: Dict[str, str],
+    *,
+    default_sheet: Optional[str] = None,
+) -> None:
+    var_specs = [
+        s
+        for s in specs
+        if str(s.id).upper().startswith("VAR_") and s.id in out and out.get(s.id, "") == ""
+    ]
+    for spec in var_specs:
+        sheet_name = spec.sheet or default_sheet
+        if not sheet_name or sheet_name not in wb_formula.sheetnames:
+            continue
+
+        try:
+            min_col, min_row, max_col, max_row = xlsx_extract._range_boundaries(spec.a1_range)
+        except Exception:
+            continue
+        if min_col != max_col or min_row != max_row:
+            continue
+
+        ws = wb_formula[sheet_name]
+        v = ws.cell(row=min_row, column=min_col).value
+        if v is None:
+            continue
+        if isinstance(v, str) and v.strip().startswith("="):
+            continue
+        out[spec.id] = _coerce_cell_value_to_str(v)
 
 
 def extract_xlsx_to_text_mapping(
@@ -150,29 +243,45 @@ def extract_xlsx_to_text_mapping(
     var_specs = [s for s in specs if str(s.id).upper().startswith("VAR_")]
     if var_specs and any(out.get(s.id, "") == "" for s in var_specs):
         wb_formula = xlsx_extract._load_workbook(filename=xlsx_path, data_only=False)
-        for spec in var_specs:
-            if out.get(spec.id, "") != "":
-                continue
-
-            sheet_name = spec.sheet or default_sheet
-            if not sheet_name or sheet_name not in wb_formula.sheetnames:
-                continue
-
-            # Only attempt for single-cell references.
-            try:
-                min_col, min_row, max_col, max_row = xlsx_extract._range_boundaries(spec.a1_range)
-            except Exception:
-                continue
-            if min_col != max_col or min_row != max_row:
-                continue
-
-            ws = wb_formula[sheet_name]
-            v = ws.cell(row=min_row, column=min_col).value
-            if v is None:
-                continue
-            # If it's a formula string, we can't evaluate here.
-            if isinstance(v, str) and v.strip().startswith("="):
-                continue
-            out[spec.id] = _coerce_cell_value_to_str(v)
+        _apply_var_formula_fallback(
+            wb_formula,
+            specs,
+            out,
+            default_sheet=default_sheet,
+        )
 
     return out
+
+
+def extract_xlsx_to_text_mapping_tolerant(
+    xlsx_path: Union[str, Path],
+    specs: Sequence[TextFieldSpec],
+    *,
+    default_sheet: Optional[str] = None,
+) -> TextFieldExtractionResult:
+    xlsx_path = Path(xlsx_path)
+    if not xlsx_path.exists():
+        raise FileNotFoundError(f"XLSX não encontrado: {xlsx_path}")
+
+    wb = xlsx_extract._load_workbook(filename=xlsx_path, data_only=True)
+    result = extract_workbook_text_mapping_tolerant(
+        wb,
+        specs,
+        default_sheet=default_sheet,
+    )
+    out = dict(result.mapping)
+
+    var_specs = [s for s in specs if str(s.id).upper().startswith("VAR_")]
+    if var_specs and any(out.get(s.id, "") == "" for s in var_specs):
+        wb_formula = xlsx_extract._load_workbook(filename=xlsx_path, data_only=False)
+        _apply_var_formula_fallback(
+            wb_formula,
+            specs,
+            out,
+            default_sheet=default_sheet,
+        )
+
+    return TextFieldExtractionResult(
+        mapping=out,
+        failures=result.failures,
+    )

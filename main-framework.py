@@ -25,6 +25,8 @@ def _parse_llm_payload(llm_response_bytes: bytes) -> object:
 
 
 def _serialize_build_response(*, pptx_bytes: bytes, filename: str, result) -> Dict[str, Any]:
+    chart_failures = getattr(result, "chart_failures", ())
+    text_field_failures = getattr(result, "text_field_failures", ())
     return {
         "filename": filename,
         "contentType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
@@ -35,6 +37,26 @@ def _serialize_build_response(*, pptx_bytes: bytes, filename: str, result) -> Di
             "replacedPlaceholders": result.replaced_placeholders,
             "replacedText": result.replaced_text,
             "generatedChartCount": result.generated_chart_count,
+            "chartFailureCount": len(chart_failures),
+            "chartFailures": [
+                {
+                    "generatorKey": failure.generator_key,
+                    "label": failure.label,
+                    "outputFiles": list(failure.output_files),
+                    "error": failure.error,
+                }
+                for failure in chart_failures
+            ],
+            "textFieldFailureCount": len(text_field_failures),
+            "textFieldFailures": [
+                {
+                    "fieldId": failure.field_id,
+                    "sheet": failure.sheet,
+                    "range": failure.a1_range,
+                    "error": failure.error,
+                }
+                for failure in text_field_failures
+            ],
             "appliedTextKeys": list(result.applied_text_keys),
         },
     }

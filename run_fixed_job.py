@@ -141,12 +141,31 @@ def main() -> None:
     )
 
     logging.info(
-        "OK: gerado %s (pictures=%d text=%d charts=%d)",
+        "OK: gerado %s (pictures=%d text=%d charts=%d chart_failures=%d text_field_failures=%d)",
         str(result.output_path),
         result.replaced_pictures,
         result.replaced_text,
         result.generated_chart_count,
+        len(result.chart_failures),
+        len(result.text_field_failures),
     )
+    if result.chart_failures:
+        for failure in result.chart_failures:
+            logging.warning(
+                "Grafico com falha em %s: arquivos=%s erro=%s",
+                failure.label,
+                ", ".join(failure.output_files),
+                failure.error,
+            )
+    if result.text_field_failures:
+        for failure in result.text_field_failures:
+            logging.warning(
+                "Campo de texto com falha: field=%s sheet=%s range=%s erro=%s",
+                failure.field_id,
+                failure.sheet or "<sem-sheet>",
+                failure.a1_range,
+                failure.error,
+            )
 
 
 if __name__ == "__main__":

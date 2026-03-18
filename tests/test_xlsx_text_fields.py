@@ -57,6 +57,8 @@ def _fake_workbook() -> _FakeWorkbook:
         (5, 5): (0.099, "0,0%"),
         # F6
         (6, 6): (0.139, '0,0"p.p."'),
+        # G7
+        (7, 7): (-0.901, '0,0%;-0,0" p.p."'),
     }
     ws = _FakeWorksheet(values)
     ws2 = _FakeWorksheet({(2, 2): 9.99, (3, 2): 9})
@@ -140,12 +142,14 @@ class TestXlsxTextFields(unittest.TestCase):
         specs = [
             TextFieldSpec(id="PP_DISPLAY", a1_range="F6", sheet="DRE Saida", is_pp=True),
             TextFieldSpec(id="PP_RAW", a1_range="F6", sheet="DRE Saida"),
+            TextFieldSpec(id="PP_NEG_DISPLAY", a1_range="G7", sheet="DRE Saida", is_pp=True),
         ]
 
         out = extract_workbook_text_mapping(_fake_workbook(), specs, default_sheet=None)
 
         self.assertEqual(out["PP_DISPLAY"], "0,1p.p.")
         self.assertEqual(out["PP_RAW"], "0.139")
+        self.assertEqual(out["PP_NEG_DISPLAY"], "-0,9 p.p.")
 
     def test_extract_workbook_text_mapping_sheet_override(self):
         specs = [

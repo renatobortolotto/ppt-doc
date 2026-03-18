@@ -139,13 +139,34 @@ def _cell_is_pp_formatted(cell) -> bool:
     return "p.p." in str(fmt).lower()
 
 
-def _extract_excel_number_format_parts(cell) -> tuple[int, str, str]:
+def _select_excel_number_format_section(cell) -> str:
     fmt = str(getattr(cell, "number_format", "") or "")
-    positive_fmt = fmt.split(";", 1)[0].replace('"', "").replace("\\", "")
+    if not fmt:
+        return ""
+
+    raw_value = getattr(cell, "value", None)
+    sections = [section.strip() for section in fmt.split(";")]
+    if len(sections) <= 1 or not isinstance(raw_value, (int, float)):
+        section = sections[0]
+    elif float(raw_value) < 0 and len(sections) >= 2:
+        section = sections[1]
+    elif float(raw_value) == 0 and len(sections) >= 3:
+        section = sections[2]
+    else:
+        section = sections[0]
+
+    while section.startswith("[") and "]" in section:
+        section = section.split("]", 1)[1].lstrip()
+    return section
+
+
+def _extract_excel_number_format_parts(cell) -> tuple[int, str, str]:
+    selected_fmt = _select_excel_number_format_section(cell)
+    normalized_fmt = selected_fmt.replace('"', "").replace("\\", "")
 
     first_numeric = -1
     last_numeric = -1
-    for idx, ch in enumerate(positive_fmt):
+    for idx, ch in enumerate(normalized_fmt):
         if first_numeric < 0:
             if ch in {"0", "#"}:
                 first_numeric = idx
@@ -159,8 +180,8 @@ def _extract_excel_number_format_parts(cell) -> tuple[int, str, str]:
     if first_numeric < 0 or last_numeric < 0:
         return 0, ".", ""
 
-    numeric_fmt = positive_fmt[first_numeric : last_numeric + 1]
-    suffix = positive_fmt[last_numeric + 1 :]
+    numeric_fmt = normalized_fmt[first_numeric : last_numeric + 1]
+    suffix = normalized_fmt[last_numeric + 1 :]
 
     decimals = 0
     decimal_sep = "."

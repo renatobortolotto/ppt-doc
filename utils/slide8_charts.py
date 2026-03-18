@@ -88,6 +88,103 @@ def _read_block(ws, a1_range: str) -> tuple[list[str], list[str], np.ndarray]:
     return xlabels, series_names, values
 
 
+def _iter_linear_cells(ws, a1_range: str):
+    min_col, min_row, max_col, max_row = range_boundaries(a1_range)
+
+    if min_row != max_row and min_col != max_col:
+        raise ValueError(f"Range precisa ser linear (1 linha ou 1 coluna): {a1_range}")
+
+    if min_row == max_row:
+        for c in range(min_col, max_col + 1):
+            yield ws.cell(row=min_row, column=c)
+        return
+
+    for r in range(min_row, max_row + 1):
+        yield ws.cell(row=r, column=min_col)
+
+
+def _read_linear_labels(ws, a1_range: str) -> list[str]:
+    labels: list[str] = []
+    for idx, cell in enumerate(_iter_linear_cells(ws, a1_range), start=1):
+        raw = cell.value
+        labels.append(("" if raw is None else str(raw)).strip() or str(idx))
+    return labels
+
+
+def _read_linear_numeric_values(ws, a1_range: str) -> list[float]:
+    values: list[float] = []
+    for cell in _iter_linear_cells(ws, a1_range):
+        raw = cell.value
+        if raw is None or (isinstance(raw, str) and raw.strip() == ""):
+            values.append(0.0)
+            continue
+        try:
+            values.append(float(raw))
+        except Exception as exc:
+            raise ValueError(f"Valor não numérico em {ws.title}!{cell.coordinate}: {raw!r}") from exc
+    return values
+
+
+def _range_has_numeric_value(ws, a1_range: str) -> bool:
+    for cell in _iter_linear_cells(ws, a1_range):
+        raw = cell.value
+        if raw is None or (isinstance(raw, str) and raw.strip() == ""):
+            continue
+        try:
+            float(raw)
+        except Exception:
+            continue
+        return True
+    return False
+
+
+def _read_slide8_revenue_rows(
+    ws,
+    *,
+    xlabels_range: str,
+    margem_values_range: str,
+    servicos_values_range: str,
+    trimestres_count: int,
+) -> tuple[tuple[list[str], list[str], np.ndarray], tuple[list[str], list[str], np.ndarray]]:
+    xlabels = _read_linear_labels(ws, xlabels_range)
+    margem_values = _read_linear_numeric_values(ws, margem_values_range)
+    servicos_values = _read_linear_numeric_values(ws, servicos_values_range)
+
+    point_count = len(xlabels)
+    if point_count == 0:
+        raise ValueError("Sem pontos para gerar os gráficos 13 e 14 do slide 8")
+    if len(margem_values) != point_count:
+        raise ValueError(
+            f"Quantidade de labels em {xlabels_range} difere de {margem_values_range}: "
+            f"{point_count} != {len(margem_values)}"
+        )
+    if len(servicos_values) != point_count:
+        raise ValueError(
+            f"Quantidade de labels em {xlabels_range} difere de {servicos_values_range}: "
+            f"{point_count} != {len(servicos_values)}"
+        )
+    if trimestres_count <= 0 or trimestres_count >= point_count:
+        raise ValueError(
+            f"trimestres_count inválido: {trimestres_count}. "
+            f"Precisa estar entre 1 e {point_count - 1}."
+        )
+
+    series_names = ["Margem Financeira Bruta", "Serviços e Seguros"]
+    values = np.column_stack((margem_values, servicos_values))
+
+    trimestre_data = (
+        xlabels[:trimestres_count],
+        series_names.copy(),
+        values[:trimestres_count, :],
+    )
+    nove_meses_data = (
+        xlabels[trimestres_count:],
+        series_names.copy(),
+        values[trimestres_count:, :],
+    )
+    return trimestre_data, nove_meses_data
+
+
 def _plot_stacked_vertical(
     *,
     xlabels: list[str],
@@ -314,14 +411,23 @@ def _plot_stacked_vertical(
     close_figure(fig)
 
 
-def generate_slide8_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
+def generate_slide8_charts(
+    *,
+    xlsx_path: Path,
+    output_dir: Path,
+    revenue_xlabels_range: str = "D5:H5",
+    revenue_margem_values_range: str = "D6:H6",
+    revenue_servicos_values_range: str = "D9:H9",
+    revenue_trimestres_count: int = 3,
+) -> list[Path]:
     """Slide 8: gera 2 gráficos de barras empilhadas verticais (13, 14).
 
     Fonte: aba 'slide_8'
-      - Trimestres: C9:E12
-      - 9M:         G9:I11
+      - Novo layout: labels em uma linha e séries fixas em linhas separadas
+        (por padrão D5:H5, D6:H6 e D9:H9; os últimos 2 pontos viram 9M)
+      - Fallback legado: C9:E12 e G9:I11
 
-    Os ranges têm header na primeira linha e xlabels na primeira coluna.
+    Os demais gráficos do slide seguem no layout tabular original.
     """
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -376,12 +482,27 @@ def generate_slide8_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
 
         return series2, vals2, colors2
 
-    # 13) (já existente) Trimestres
-    xlabels, series, values = _read_block(ws, "C9:E12")
-    series, values, colors = _reorder_for_stacking(series, values)
+    use_row_layout_for_revenue = _range_has_numeric_value(ws, revenue_margem_values_range) and _range_has_numeric_value(
+        ws, revenue_servicos_values_range
+    )
+
+    if use_row_layout_for_revenue:
+        (xlabels13, series13, values13), (xlabels14, series14, values14) = _read_slide8_revenue_rows(
+            ws,
+            xlabels_range=revenue_xlabels_range,
+            margem_values_range=revenue_margem_values_range,
+            servicos_values_range=revenue_servicos_values_range,
+            trimestres_count=revenue_trimestres_count,
+        )
+    else:
+        xlabels13, series13, values13 = _read_block(ws, "C9:E12")
+        xlabels14, series14, values14 = _read_block(ws, "G9:I11")
+
+    # 13) Trimestres
+    series, values, colors = _reorder_for_stacking(series13, values13)
     out13 = output_dir / "13_slide8_trimestres.png"
     _plot_stacked_vertical(
-        xlabels=xlabels,
+        xlabels=xlabels13,
         series_names=series,
         values=values,
         output_path=out13,
@@ -395,12 +516,11 @@ def generate_slide8_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     )
     generated.append(out13)
 
-    # 14) (já existente) 9M
-    xlabels, series, values = _read_block(ws, "G9:I11")
-    series, values, colors = _reorder_for_stacking(series, values)
+    # 14) 9M
+    series, values, colors = _reorder_for_stacking(series14, values14)
     out14 = output_dir / "14_slide8_9m.png"
     _plot_stacked_vertical(
-        xlabels=xlabels,
+        xlabels=xlabels14,
         series_names=series,
         values=values,
         output_path=out14,

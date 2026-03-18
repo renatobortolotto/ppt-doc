@@ -142,6 +142,7 @@ class TestXlsxTextFields(unittest.TestCase):
         specs = [
             TextFieldSpec(id="PP_NUMERIC", a1_range="F6", sheet="DRE Saida", is_pp=True),
             TextFieldSpec(id="PP_NUMERIC_ROUND", a1_range="F6", sheet="DRE Saida", is_pp=True, round=1),
+            TextFieldSpec(id="PP_WINS_OVER_PERCENT", a1_range="G7", sheet="DRE Saida", is_pp=True, is_porc=True, round=1),
             TextFieldSpec(id="PP_RAW", a1_range="F6", sheet="DRE Saida"),
             TextFieldSpec(id="PP_NEG_NUMERIC", a1_range="G7", sheet="DRE Saida", is_pp=True, round=1),
         ]
@@ -150,6 +151,7 @@ class TestXlsxTextFields(unittest.TestCase):
 
         self.assertEqual(out["PP_NUMERIC"], "0.139")
         self.assertEqual(out["PP_NUMERIC_ROUND"], "0.1")
+        self.assertEqual(out["PP_WINS_OVER_PERCENT"], "-0.9")
         self.assertEqual(out["PP_RAW"], "0.139")
         self.assertEqual(out["PP_NEG_NUMERIC"], "-0.9")
 

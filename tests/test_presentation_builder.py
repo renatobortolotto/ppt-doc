@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from utils.xlsx_text_fields import TextFieldSpec
+
 from presentation_builder import (
     ChartGenerationFailure,
     ChartGenerationResult,
@@ -74,26 +76,30 @@ class TestPresentationBuilder(unittest.TestCase):
         ) as load_workbook_mock:
             load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
             with patch(
-                "presentation_builder.generate_chart_assets",
-                return_value=ChartGenerationResult(generated_files=(Path("chart.png"),), failures=()),
+                "presentation_builder._load_text_fields_config",
+                return_value=(self.repo_root / "config" / "text_fields.json", "DRE Saida", ()),
             ):
                 with patch(
-                    "presentation_builder.build_text_mapping_with_failures",
-                    return_value=TextFieldExtractionResult(
-                        mapping={"slide1_title": "Titulo"},
-                        failures=(),
-                    ),
+                    "presentation_builder.generate_chart_assets",
+                    return_value=ChartGenerationResult(generated_files=(Path("chart.png"),), failures=()),
                 ):
                     with patch(
-                        "presentation_builder.update_presentation",
-                        return_value=fake_result,
-                    ) as update_mock:
-                        result = build_presentation(
-                            repo_root=self.repo_root,
-                            cfg=self.cfg,
-                            xlsx_path=self.repo_root / "testing.xlsx",
-                            llm_payload={"response": {"titles": {"slide1_title": "Titulo"}}},
-                        )
+                        "presentation_builder.build_text_mapping_with_failures",
+                        return_value=TextFieldExtractionResult(
+                            mapping={"slide1_title": "Titulo"},
+                            failures=(),
+                        ),
+                    ):
+                        with patch(
+                            "presentation_builder.update_presentation",
+                            return_value=fake_result,
+                        ) as update_mock:
+                            result = build_presentation(
+                                repo_root=self.repo_root,
+                                cfg=self.cfg,
+                                xlsx_path=self.repo_root / "testing.xlsx",
+                                llm_payload={"response": {"titles": {"slide1_title": "Titulo"}}},
+                            )
 
         self.assertEqual(result.generated_chart_count, 1)
         self.assertEqual(result.replaced_pictures, 3)
@@ -101,6 +107,7 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertEqual(result.chart_failures, ())
         self.assertEqual(result.text_field_failures, ())
         update_mock.assert_called_once()
+        self.assertEqual(update_mock.call_args.kwargs["pp_field_ids"], ())
 
     def test_build_presentation_raises_clear_error_for_invalid_xlsx(self):
         with patch(
@@ -213,28 +220,32 @@ class TestPresentationBuilder(unittest.TestCase):
         ) as load_workbook_mock:
             load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
             with patch(
-                "presentation_builder.generate_chart_assets",
-                return_value=ChartGenerationResult(
-                    generated_files=(Path("03_roe_trimestres.png"),),
-                    failures=chart_failures,
-                ),
+                "presentation_builder._load_text_fields_config",
+                return_value=(self.repo_root / "config" / "text_fields.json", "DRE Saida", ()),
             ):
                 with patch(
-                    "presentation_builder.build_text_mapping_with_failures",
-                    return_value=TextFieldExtractionResult(
-                        mapping={"slide1_title": "Titulo"},
-                        failures=(),
+                    "presentation_builder.generate_chart_assets",
+                    return_value=ChartGenerationResult(
+                        generated_files=(Path("03_roe_trimestres.png"),),
+                        failures=chart_failures,
                     ),
                 ):
                     with patch(
-                        "presentation_builder.update_presentation",
-                        return_value=fake_result,
+                        "presentation_builder.build_text_mapping_with_failures",
+                        return_value=TextFieldExtractionResult(
+                            mapping={"slide1_title": "Titulo"},
+                            failures=(),
+                        ),
                     ):
-                        result = build_presentation(
-                            repo_root=self.repo_root,
-                            cfg=self.cfg,
-                            xlsx_path=self.repo_root / "testing.xlsx",
-                        )
+                        with patch(
+                            "presentation_builder.update_presentation",
+                            return_value=fake_result,
+                        ):
+                            result = build_presentation(
+                                repo_root=self.repo_root,
+                                cfg=self.cfg,
+                                xlsx_path=self.repo_root / "testing.xlsx",
+                            )
 
         self.assertEqual(result.generated_chart_count, 1)
         self.assertEqual(result.chart_failures, chart_failures)
@@ -248,8 +259,9 @@ class TestPresentationBuilder(unittest.TestCase):
             captured["generate_only_slides"] = only_slides
             return ChartGenerationResult(generated_files=(images_dir / "slide8.png",), failures=())
 
-        def _fake_update_presentation(*, pptx_path, output_path, images_dir, allow_placeholder_text, text_json, text_payload):
+        def _fake_update_presentation(*, pptx_path, output_path, images_dir, allow_placeholder_text, text_json, text_payload, pp_field_ids):
             captured["update_images_dir"] = images_dir
+            captured["update_pp_field_ids"] = pp_field_ids
             return fake_result
 
         with patch(
@@ -257,30 +269,39 @@ class TestPresentationBuilder(unittest.TestCase):
         ) as load_workbook_mock:
             load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
             with patch(
-                "presentation_builder.generate_chart_assets",
-                side_effect=_fake_generate_chart_assets,
+                "presentation_builder._load_text_fields_config",
+                return_value=(
+                    self.repo_root / "config" / "text_fields.json",
+                    "DRE Saida",
+                    (TextFieldSpec(id="VAR_TEST", a1_range="A1", sheet="S", is_pp=True),),
+                ),
             ):
                 with patch(
-                    "presentation_builder.build_text_mapping_with_failures",
-                    return_value=TextFieldExtractionResult(
-                        mapping={"slide1_title": "Titulo"},
-                        failures=(),
-                    ),
+                    "presentation_builder.generate_chart_assets",
+                    side_effect=_fake_generate_chart_assets,
                 ):
                     with patch(
-                        "presentation_builder.update_presentation",
-                        side_effect=_fake_update_presentation,
+                        "presentation_builder.build_text_mapping_with_failures",
+                        return_value=TextFieldExtractionResult(
+                            mapping={"slide1_title": "Titulo"},
+                            failures=(),
+                        ),
                     ):
-                        build_presentation(
-                            repo_root=self.repo_root,
-                            cfg=self.cfg,
-                            xlsx_path=self.repo_root / "testing.xlsx",
-                            only_slides=(1, 8),
-                        )
+                        with patch(
+                            "presentation_builder.update_presentation",
+                            side_effect=_fake_update_presentation,
+                        ):
+                            build_presentation(
+                                repo_root=self.repo_root,
+                                cfg=self.cfg,
+                                xlsx_path=self.repo_root / "testing.xlsx",
+                                only_slides=(1, 8),
+                            )
 
         self.assertEqual(captured["generate_only_slides"], (1, 8))
         self.assertEqual(captured["generate_images_dir"], captured["update_images_dir"])
         self.assertNotEqual(captured["generate_images_dir"], self.repo_root)
+        self.assertEqual(captured["update_pp_field_ids"], ("VAR_TEST",))
 
     def test_build_text_mapping_with_failures_preserves_partial_texts(self):
         llm_payload = {
@@ -329,28 +350,32 @@ class TestPresentationBuilder(unittest.TestCase):
         ) as load_workbook_mock:
             load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
             with patch(
-                "presentation_builder.generate_chart_assets",
-                return_value=ChartGenerationResult(
-                    generated_files=(Path("03_roe_trimestres.png"),),
-                    failures=(),
-                ),
+                "presentation_builder._load_text_fields_config",
+                return_value=(self.repo_root / "config" / "text_fields.json", "DRE Saida", ()),
             ):
                 with patch(
-                    "presentation_builder.build_text_mapping_with_failures",
-                    return_value=TextFieldExtractionResult(
-                        mapping={"slide1_title": "Titulo"},
-                        failures=text_failures,
+                    "presentation_builder.generate_chart_assets",
+                    return_value=ChartGenerationResult(
+                        generated_files=(Path("03_roe_trimestres.png"),),
+                        failures=(),
                     ),
                 ):
                     with patch(
-                        "presentation_builder.update_presentation",
-                        return_value=fake_result,
+                        "presentation_builder.build_text_mapping_with_failures",
+                        return_value=TextFieldExtractionResult(
+                            mapping={"slide1_title": "Titulo"},
+                            failures=text_failures,
+                        ),
                     ):
-                        result = build_presentation(
-                            repo_root=self.repo_root,
-                            cfg=self.cfg,
-                            xlsx_path=self.repo_root / "testing.xlsx",
-                        )
+                        with patch(
+                            "presentation_builder.update_presentation",
+                            return_value=fake_result,
+                        ):
+                            result = build_presentation(
+                                repo_root=self.repo_root,
+                                cfg=self.cfg,
+                                xlsx_path=self.repo_root / "testing.xlsx",
+                            )
 
         self.assertEqual(result.generated_chart_count, 1)
         self.assertEqual(result.text_field_failures, text_failures)

@@ -337,14 +337,14 @@ def _extract_text_value_for_spec(
     cells = _iter_cells_in_range(ws, spec.a1_range)
     pieces = [
         (
-            _format_percent_display(cell)
-            if spec.is_porc
-            else _format_pp_numeric_value(
+            _format_pp_numeric_value(
                 cell,
                 divisor=spec.div,
                 round_digits=spec.round,
             )
             if spec.is_pp
+            else _format_percent_display(cell)
+            if spec.is_porc
             else _format_extracted_value(
                 cell.value,
                 divisor=spec.div,
@@ -447,14 +447,14 @@ def _apply_var_formula_fallback(
         if isinstance(v, str) and v.strip().startswith("="):
             continue
         out[spec.id] = (
-            _format_percent_display(cell)
-            if spec.is_porc
-            else _format_pp_numeric_value(
+            _format_pp_numeric_value(
                 cell,
                 divisor=spec.div,
                 round_digits=spec.round,
             )
             if spec.is_pp
+            else _format_percent_display(cell)
+            if spec.is_porc
             else _format_extracted_value(
                 v,
                 divisor=spec.div,

@@ -121,6 +121,19 @@ def _filter_llm_mapping(text_fields_config: Path, llm_mapping: Dict[str, str]) -
     return {key: value for key, value in llm_mapping.items() if key in allowed}
 
 
+def _load_text_fields_config(
+    *,
+    repo_root: Path,
+    cfg: Mapping[str, Any],
+) -> tuple[Path, str | None, Sequence[object]]:
+    text_fields_config = resolve_path(
+        repo_root,
+        str(cfg.get("text_fields_config", "config/text_fields.json")),
+    )
+    default_sheet, specs = parse_text_fields_json(text_fields_config)
+    return text_fields_config, default_sheet, specs
+
+
 def build_text_mapping(
     *,
     repo_root: Path,
@@ -143,11 +156,10 @@ def build_text_mapping_with_failures(
     xlsx_path: Path,
     llm_payload: object | None,
 ) -> TextFieldExtractionResult:
-    text_fields_config = resolve_path(
-        repo_root,
-        str(cfg.get("text_fields_config", "config/text_fields.json")),
+    text_fields_config, default_sheet, specs = _load_text_fields_config(
+        repo_root=repo_root,
+        cfg=cfg,
     )
-    default_sheet, specs = parse_text_fields_json(text_fields_config)
     extraction_result = extract_xlsx_to_text_mapping_tolerant(
         xlsx_path,
         specs,
@@ -407,6 +419,11 @@ def build_presentation(
     pptx_template = resolve_path(repo_root, str(cfg.get("pptx_template")))
     allow_placeholder_text = bool(cfg.get("allow_placeholder_text", False))
     effective_llm_payload = llm_payload if llm_payload is not None else load_llm_payload_from_path(repo_root, cfg)
+    _text_fields_config_path, _default_sheet, text_specs = _load_text_fields_config(
+        repo_root=repo_root,
+        cfg=cfg,
+    )
+    pp_field_ids = tuple(spec.id for spec in text_specs if getattr(spec, "is_pp", False))
 
     with TemporaryDirectory(prefix="ppt-doc-images-") as temp_images_dir:
         if normalized_only_slides and images_dir is None:
@@ -450,6 +467,7 @@ def build_presentation(
             allow_placeholder_text=allow_placeholder_text,
             text_json=None,
             text_payload=text_mapping,
+            pp_field_ids=pp_field_ids,
         )
 
     return BuildPresentationResult(

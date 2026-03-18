@@ -6,6 +6,7 @@ import logging
 import re
 import warnings
 from pathlib import Path
+from typing import Sequence
 
 from PIL import Image
 
@@ -117,7 +118,12 @@ def _flatten_text_payload(payload: object) -> dict[str, str]:
     return mapping
 
 
-def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
+def _replace_text_in_shape(
+    shape,
+    mapping: dict[str, str],
+    *,
+    pp_field_ids: set[str] | None = None,
+) -> int:
     """Replace text placeholders inside a shape. Returns number of replacements."""
 
     def _is_var_field(key: str) -> bool:
@@ -146,7 +152,11 @@ def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
         except Exception:
             return None
 
-    def _format_var_indicator_parts(raw: str) -> tuple[str, str, RGBColor] | None:
+    def _format_var_indicator_parts(
+        raw: str,
+        *,
+        is_pp_field: bool = False,
+    ) -> tuple[str, str, RGBColor] | None:
         val = _parse_float_loose(raw)
         if val is None:
             return None
@@ -154,6 +164,7 @@ def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
         # Decide if the source is already a percentage.
         raw_s = str(raw).strip()
         has_percent = "%" in raw_s
+        has_pp = "p.p." in raw_s.lower()
 
         eps = 1e-9
         if abs(val) <= eps:
@@ -169,7 +180,7 @@ def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
             color = RGBColor(0xC0, 0x00, 0x00)  # red
             mag = abs(val)
 
-        if has_percent:
+        if has_percent or has_pp:
             # Preserve user's/Excel's formatted magnitude as much as possible.
             # Just remove sign characters.
             cleaned = raw_s
@@ -177,6 +188,10 @@ def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
             cleaned = cleaned.replace("-", "")
             cleaned = cleaned.strip()
             return glyph, cleaned, color
+
+        if is_pp_field:
+            mag_txt = f"{mag:.1f}".replace(".", ",") + " p.p."
+            return glyph, mag_txt, color
 
         # If the cell is a fraction (0.0123), treat as percent.
         if abs(mag) <= 1.0:
@@ -188,13 +203,16 @@ def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
         mag_txt = f"{mag_pct:.1f}%".replace(".", ",")
         return glyph, mag_txt, color
 
-    def _set_shape_text_with_var(*, raw: str) -> bool:
+    def _set_shape_text_with_var(*, key: str, raw: str) -> bool:
         """Set shape text to 'glyph value' with only glyph colored.
 
         Returns True if it applied VAR formatting, False otherwise.
         """
 
-        formatted = _format_var_indicator_parts(raw)
+        formatted = _format_var_indicator_parts(
+            raw,
+            is_pp_field=bool(pp_field_ids and key in pp_field_ids),
+        )
         if formatted is None:
             return False
         glyph, mag_txt, rgb = formatted
@@ -306,7 +324,10 @@ def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
 
             raw = mapping[key]
             if _is_var_field(key):
-                parts = _format_var_indicator_parts(raw)
+                parts = _format_var_indicator_parts(
+                    raw,
+                    is_pp_field=bool(pp_field_ids and key in pp_field_ids),
+                )
                 if parts is None:
                     segs.append((raw, None))
                 else:
@@ -351,7 +372,7 @@ def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
     if alt and alt in mapping:
         raw = mapping[alt]
         if _is_var_field(alt):
-            if _set_shape_text_with_var(raw=raw):
+            if _set_shape_text_with_var(key=alt, raw=raw):
                 return 1
         shape.text_frame.text = raw
         return 1
@@ -365,7 +386,7 @@ def _replace_text_in_shape(shape, mapping: dict[str, str]) -> int:
     if key in mapping:
         raw = mapping[key]
         if _is_var_field(key):
-            if _set_shape_text_with_var(raw=raw):
+            if _set_shape_text_with_var(key=key, raw=raw):
                 return 1
         shape.text_frame.text = raw
         return 1
@@ -417,6 +438,7 @@ def update_presentation(
     allow_placeholder_text: bool,
     text_json: Path | None,
     text_payload: object | None = None,
+    pp_field_ids: Sequence[str] | None = None,
 ) -> tuple[int, int, int, list[str], list[str], list[str]]:
     prs = Presentation(str(pptx_path))
 
@@ -433,6 +455,8 @@ def update_presentation(
             payload = payload["response"]
         text_mapping = _flatten_text_payload(payload)
 
+    pp_field_ids_set = set(pp_field_ids or ())
+
     replaced_pictures = 0
     replaced_placeholders = 0
     replaced_text = 0
@@ -444,7 +468,11 @@ def update_presentation(
     for slide in prs.slides:
         for shape in list(slide.shapes):
             if text_mapping:
-                replaced_text += _replace_text_in_shape(shape, text_mapping)
+                replaced_text += _replace_text_in_shape(
+                    shape,
+                    text_mapping,
+                    pp_field_ids=pp_field_ids_set,
+                )
 
             if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                 alt = _get_shape_alt_text(shape)

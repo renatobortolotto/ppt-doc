@@ -20,6 +20,7 @@ class TextFieldSpec:
     div: Optional[float] = None
     round: Optional[int] = None
     is_porc: bool = False
+    is_pp: bool = False
 
 
 @dataclass(frozen=True)
@@ -128,6 +129,51 @@ def _cell_is_percent_formatted(cell) -> bool:
     return "%" in str(fmt)
 
 
+def _cell_is_pp_formatted(cell) -> bool:
+    try:
+        fmt = cell.number_format
+    except Exception:
+        return False
+    if not fmt:
+        return False
+    return "p.p." in str(fmt).lower()
+
+
+def _extract_excel_number_format_parts(cell) -> tuple[int, str, str]:
+    fmt = str(getattr(cell, "number_format", "") or "")
+    positive_fmt = fmt.split(";", 1)[0].replace('"', "").replace("\\", "")
+
+    first_numeric = -1
+    last_numeric = -1
+    for idx, ch in enumerate(positive_fmt):
+        if first_numeric < 0:
+            if ch in {"0", "#"}:
+                first_numeric = idx
+                last_numeric = idx
+            continue
+        if ch in {"0", "#", ".", ","}:
+            last_numeric = idx
+            continue
+        break
+
+    if first_numeric < 0 or last_numeric < 0:
+        return 0, ".", ""
+
+    numeric_fmt = positive_fmt[first_numeric : last_numeric + 1]
+    suffix = positive_fmt[last_numeric + 1 :]
+
+    decimals = 0
+    decimal_sep = "."
+    last_dot = numeric_fmt.rfind(".")
+    last_comma = numeric_fmt.rfind(",")
+    sep_pos = max(last_dot, last_comma)
+    if sep_pos >= 0:
+        decimal_sep = numeric_fmt[sep_pos]
+        decimals = sum(ch in {"0", "#"} for ch in numeric_fmt[sep_pos + 1 :])
+
+    return decimals, decimal_sep, suffix
+
+
 def _format_percent_display(cell) -> str:
     raw_value = getattr(cell, "value", None)
     if raw_value is None:
@@ -142,26 +188,33 @@ def _format_percent_display(cell) -> str:
     if not _cell_is_percent_formatted(cell):
         return _coerce_cell_value_to_str(raw_value)
 
-    fmt = str(getattr(cell, "number_format", "") or "")
-    positive_fmt = fmt.split(";", 1)[0]
-
-    decimals = 0
-    decimal_sep = "."
-    marker = positive_fmt.find("%")
-    if marker >= 0:
-        numeric_fmt = positive_fmt[:marker]
-        last_dot = numeric_fmt.rfind(".")
-        last_comma = numeric_fmt.rfind(",")
-        sep_pos = max(last_dot, last_comma)
-        if sep_pos >= 0:
-            decimal_sep = numeric_fmt[sep_pos]
-            decimals = sum(ch in {"0", "#"} for ch in numeric_fmt[sep_pos + 1 :])
-
+    decimals, decimal_sep, suffix = _extract_excel_number_format_parts(cell)
     pct_value = float(raw_value) * 100.0
     rendered = format(pct_value, f".{decimals}f")
     if decimal_sep == ",":
         rendered = rendered.replace(".", ",")
-    return f"{rendered}%"
+    return f"{rendered}{suffix or '%'}"
+
+
+def _format_pp_display(cell) -> str:
+    raw_value = getattr(cell, "value", None)
+    if raw_value is None:
+        return ""
+    if isinstance(raw_value, str):
+        return raw_value.strip()
+    if isinstance(raw_value, bool):
+        return str(raw_value)
+    if not isinstance(raw_value, (int, float)):
+        return _coerce_cell_value_to_str(raw_value)
+
+    if not _cell_is_pp_formatted(cell):
+        return _coerce_cell_value_to_str(raw_value)
+
+    decimals, decimal_sep, suffix = _extract_excel_number_format_parts(cell)
+    rendered = format(float(raw_value), f".{decimals}f")
+    if decimal_sep == ",":
+        rendered = rendered.replace(".", ",")
+    return f"{rendered}{suffix or 'p.p.'}"
 
 
 def _iter_cells_in_range(ws, a1_range: str) -> List[Any]:
@@ -221,6 +274,7 @@ def parse_text_fields_json(path: Union[str, Path]) -> tuple[Optional[str], List[
                     div=_parse_divisor(item.get("div"), field_id=str(field_id)),
                     round=_parse_round_digits(item.get("round"), field_id=str(field_id)),
                     is_porc=_parse_bool_flag(item.get("is_porc"), field_id=str(field_id), field_name="is_porc"),
+                    is_pp=_parse_bool_flag(item.get("is_pp"), field_id=str(field_id), field_name="is_pp"),
                 )
             )
 
@@ -251,6 +305,7 @@ def parse_text_fields_json(path: Union[str, Path]) -> tuple[Optional[str], List[
                     div=_parse_divisor(value.get("div"), field_id=str(key)),
                     round=_parse_round_digits(value.get("round"), field_id=str(key)),
                     is_porc=_parse_bool_flag(value.get("is_porc"), field_id=str(key), field_name="is_porc"),
+                    is_pp=_parse_bool_flag(value.get("is_pp"), field_id=str(key), field_name="is_pp"),
                 )
             )
             continue
@@ -281,6 +336,8 @@ def _extract_text_value_for_spec(
         (
             _format_percent_display(cell)
             if spec.is_porc
+            else _format_pp_display(cell)
+            if spec.is_pp
             else _format_extracted_value(
                 cell.value,
                 divisor=spec.div,
@@ -385,6 +442,8 @@ def _apply_var_formula_fallback(
         out[spec.id] = (
             _format_percent_display(cell)
             if spec.is_porc
+            else _format_pp_display(cell)
+            if spec.is_pp
             else _format_extracted_value(
                 v,
                 divisor=spec.div,

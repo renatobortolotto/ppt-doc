@@ -55,6 +55,8 @@ def _fake_workbook() -> _FakeWorkbook:
         (3, 4): "B",
         # E5
         (5, 5): (0.099, "0,0%"),
+        # F6
+        (6, 6): (0.139, '0,0"p.p."'),
     }
     ws = _FakeWorksheet(values)
     ws2 = _FakeWorksheet({(2, 2): 9.99, (3, 2): 9})
@@ -65,7 +67,10 @@ class TestXlsxTextFields(unittest.TestCase):
     def test_parse_text_fields_object_format(self):
         payload = {
             "default_sheet": "DRE Saida",
-            "fields": {"ROE_RECORRENTE": "K20", "X": {"cell": "B2", "div": 1000, "round": 1, "is_porc": True}},
+            "fields": {
+                "ROE_RECORRENTE": "K20",
+                "X": {"cell": "B2", "div": 1000, "round": 1, "is_porc": True, "is_pp": False},
+            },
         }
 
         with tempfile.TemporaryDirectory() as td:
@@ -81,9 +86,11 @@ class TestXlsxTextFields(unittest.TestCase):
         self.assertIsNone(specs[0].div)
         self.assertIsNone(specs[0].round)
         self.assertFalse(specs[0].is_porc)
+        self.assertFalse(specs[0].is_pp)
         self.assertEqual(specs[1].div, 1000.0)
         self.assertEqual(specs[1].round, 1)
         self.assertTrue(specs[1].is_porc)
+        self.assertFalse(specs[1].is_pp)
 
     def test_extract_workbook_text_mapping_single_cell_and_range(self):
         specs = [
@@ -128,6 +135,17 @@ class TestXlsxTextFields(unittest.TestCase):
 
         self.assertEqual(out["ROE_DISPLAY"], "9,9%")
         self.assertEqual(out["ROE_RAW"], "0.099")
+
+    def test_extract_workbook_text_mapping_preserves_pp_display_when_is_pp(self):
+        specs = [
+            TextFieldSpec(id="PP_DISPLAY", a1_range="F6", sheet="DRE Saida", is_pp=True),
+            TextFieldSpec(id="PP_RAW", a1_range="F6", sheet="DRE Saida"),
+        ]
+
+        out = extract_workbook_text_mapping(_fake_workbook(), specs, default_sheet=None)
+
+        self.assertEqual(out["PP_DISPLAY"], "0,1p.p.")
+        self.assertEqual(out["PP_RAW"], "0.139")
 
     def test_extract_workbook_text_mapping_sheet_override(self):
         specs = [

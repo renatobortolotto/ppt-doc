@@ -4,6 +4,7 @@
     "ROE_RECORRENTE": "K20",
     "LUCRO_RECORRENTE": "C18",
     "ROE_EXIBICAO": {"sheet": "DRE Saida", "cell": "K20", "is_porc": true},
+    "VARIACAO_PP_EXIBICAO": {"sheet": "DRE Saida", "cell": "K21", "is_pp": true},
     "TAXA_DESCONTO": {"sheet": "Premissas", "cell": "B2"},
     "CARTEIRA_EM_MILHARES": {"sheet": "Premissas", "cell": "B3", "div": 1000, "round": 1}
   }

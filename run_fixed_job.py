@@ -78,6 +78,41 @@ def _load_job_config(repo_root: Path) -> Dict[str, Any]:
     return raw
 
 
+def _parse_only_slides(raw_value: str) -> tuple[int, ...]:
+    slides: list[int] = []
+
+    for chunk in str(raw_value).split(","):
+        part = chunk.strip()
+        if not part:
+            continue
+        if "-" in part:
+            start_text, end_text = [value.strip() for value in part.split("-", 1)]
+            if not start_text.isdigit() or not end_text.isdigit():
+                raise ValueError(
+                    "only-slides deve usar numeros separados por virgula ou intervalos como 1-8"
+                )
+            start = int(start_text)
+            end = int(end_text)
+            if start <= 0 or end <= 0 or end < start:
+                raise ValueError("only-slides precisa usar numeros positivos em ordem crescente")
+            slides.extend(range(start, end + 1))
+            continue
+
+        if not part.isdigit():
+            raise ValueError(
+                "only-slides deve usar numeros separados por virgula ou intervalos como 1-8"
+            )
+        slide = int(part)
+        if slide <= 0:
+            raise ValueError("only-slides precisa usar numeros positivos")
+        slides.append(slide)
+
+    normalized = tuple(dict.fromkeys(slides))
+    if not normalized:
+        raise ValueError("only-slides nao pode ficar vazio")
+    return normalized
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -112,6 +147,14 @@ def main() -> None:
             "Quando omitido, o runner usa o llm_response_json configurado no job."
         ),
     )
+    parser.add_argument(
+        "--only-slides",
+        default=None,
+        help=(
+            "Opcional: limita a geracao de graficos aos slides informados. "
+            "Aceita lista e intervalos, por exemplo: 3,4,7,8 ou 1-8."
+        ),
+    )
     args = parser.parse_args()
 
     log_file = args.log_file or os.environ.get("PPTDOC_LOG_FILE")
@@ -132,12 +175,21 @@ def main() -> None:
             raise FileNotFoundError(f"JSON da LLM não encontrado: {llm_json_path}")
         llm_payload = json.loads(llm_json_path.read_text(encoding="utf-8"))
 
+    only_slides = None
+    if args.only_slides:
+        try:
+            only_slides = _parse_only_slides(str(args.only_slides))
+        except ValueError as exc:
+            parser.error(str(exc))
+        logging.info("Limitando geracao de graficos aos slides: %s", ", ".join(str(slide) for slide in only_slides))
+
     result = build_presentation(
         repo_root=repo_root,
         cfg=cfg,
         xlsx_path=xlsx_path,
         llm_payload=llm_payload,
         skip_charts=bool(args.skip_charts),
+        only_slides=only_slides,
     )
 
     logging.info(

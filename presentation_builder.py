@@ -293,11 +293,56 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
     )
 
 
-def generate_chart_assets(*, xlsx_path: Path, images_dir: Path) -> ChartGenerationResult:
+def _chart_generator_slide_number(spec: ChartGeneratorSpec) -> int | None:
+    suffix = spec.key.removeprefix("slide")
+    if spec.key.startswith("slide") and suffix.isdigit():
+        return int(suffix)
+    return None
+
+
+def _select_chart_generators(
+    only_slides: Sequence[int] | None,
+) -> tuple[tuple[ChartGeneratorSpec, ...], tuple[int, ...]]:
+    specs = tuple(_chart_generators())
+    if not only_slides:
+        return specs, ()
+
+    requested = tuple(dict.fromkeys(int(slide) for slide in only_slides))
+    available_slides = {
+        slide_number
+        for spec in specs
+        for slide_number in [_chart_generator_slide_number(spec)]
+        if slide_number is not None
+    }
+    selected = tuple(
+        spec for spec in specs if _chart_generator_slide_number(spec) in set(requested)
+    )
+    ignored = tuple(slide for slide in requested if slide not in available_slides)
+    if not selected:
+        raise ValueError(
+            "Nenhum dos slides informados possui gerador de graficos configurado. "
+            f"Disponiveis: {', '.join(str(slide) for slide in sorted(available_slides))}"
+        )
+    return selected, ignored
+
+
+def generate_chart_assets(
+    *,
+    xlsx_path: Path,
+    images_dir: Path,
+    only_slides: Sequence[int] | None = None,
+) -> ChartGenerationResult:
     generated_files: list[Path] = []
     failures: list[ChartGenerationFailure] = []
+    selected_specs, ignored_slides = _select_chart_generators(only_slides)
 
-    for spec in _chart_generators():
+    if ignored_slides:
+        logging.warning(
+            "Slides sem geradores de graficos configurados foram ignorados: %s",
+            ", ".join(str(slide) for slide in ignored_slides),
+        )
+
+    for spec in selected_specs:
         try:
             generated_files.extend(spec.generator(xlsx_path=xlsx_path, output_dir=images_dir))
         except Exception as exc:
@@ -345,55 +390,67 @@ def build_presentation(
     output_path: Path | None = None,
     images_dir: Path | None = None,
     skip_charts: bool = False,
+    only_slides: Sequence[int] | None = None,
 ) -> BuildPresentationResult:
     if not xlsx_path.exists():
         raise FileNotFoundError(f"XLSX nao encontrado: {xlsx_path}")
 
     _validate_xlsx_path(xlsx_path)
 
+    normalized_only_slides = tuple(dict.fromkeys(int(slide) for slide in only_slides)) if only_slides else None
+    if normalized_only_slides and skip_charts:
+        raise ValueError("only_slides nao pode ser usado junto com skip_charts")
+
     effective_output_path = output_path or resolve_path(repo_root, str(cfg.get("pptx_output")))
     effective_images_dir = images_dir or resolve_path(repo_root, str(cfg.get("images_dir", ".")))
-    effective_images_dir.mkdir(parents=True, exist_ok=True)
 
     pptx_template = resolve_path(repo_root, str(cfg.get("pptx_template")))
     allow_placeholder_text = bool(cfg.get("allow_placeholder_text", False))
     effective_llm_payload = llm_payload if llm_payload is not None else load_llm_payload_from_path(repo_root, cfg)
 
-    generated_chart_count = 0
-    chart_failures: tuple[ChartGenerationFailure, ...] = ()
-    text_field_failures: tuple[TextFieldFailure, ...] = ()
-    if not skip_charts:
-        chart_generation = generate_chart_assets(
+    with TemporaryDirectory(prefix="ppt-doc-images-") as temp_images_dir:
+        if normalized_only_slides and images_dir is None:
+            active_images_dir = Path(temp_images_dir)
+        else:
+            active_images_dir = effective_images_dir
+            active_images_dir.mkdir(parents=True, exist_ok=True)
+
+        generated_chart_count = 0
+        chart_failures: tuple[ChartGenerationFailure, ...] = ()
+        text_field_failures: tuple[TextFieldFailure, ...] = ()
+        if not skip_charts:
+            chart_generation = generate_chart_assets(
+                xlsx_path=xlsx_path,
+                images_dir=active_images_dir,
+                only_slides=normalized_only_slides,
+            )
+            generated_chart_count = len(chart_generation.generated_files)
+            chart_failures = chart_generation.failures
+
+        text_mapping_result = build_text_mapping_with_failures(
+            repo_root=repo_root,
+            cfg=cfg,
             xlsx_path=xlsx_path,
-            images_dir=effective_images_dir,
+            llm_payload=effective_llm_payload,
         )
-        generated_chart_count = len(chart_generation.generated_files)
-        chart_failures = chart_generation.failures
+        text_mapping = text_mapping_result.mapping
+        text_field_failures = text_mapping_result.failures
 
-    text_mapping_result = build_text_mapping_with_failures(
-        repo_root=repo_root,
-        cfg=cfg,
-        xlsx_path=xlsx_path,
-        llm_payload=effective_llm_payload,
-    )
-    text_mapping = text_mapping_result.mapping
-    text_field_failures = text_mapping_result.failures
-
-    (
-        replaced_pictures,
-        replaced_placeholders,
-        replaced_text,
-        _replaced_files,
-        _missing_files,
-        applied_text_keys,
-    ) = update_presentation(
-        pptx_path=pptx_template,
-        output_path=effective_output_path,
-        images_dir=effective_images_dir,
-        allow_placeholder_text=allow_placeholder_text,
-        text_json=None,
-        text_payload=text_mapping,
-    )
+        (
+            replaced_pictures,
+            replaced_placeholders,
+            replaced_text,
+            _replaced_files,
+            _missing_files,
+            applied_text_keys,
+        ) = update_presentation(
+            pptx_path=pptx_template,
+            output_path=effective_output_path,
+            images_dir=active_images_dir,
+            allow_placeholder_text=allow_placeholder_text,
+            text_json=None,
+            text_payload=text_mapping,
+        )
 
     return BuildPresentationResult(
         output_path=effective_output_path,

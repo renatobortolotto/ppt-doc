@@ -149,6 +149,55 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertEqual(result.failures[0].output_files, ("bad1.png", "bad2.png"))
         log_mock.assert_called_once()
 
+    def test_generate_chart_assets_filters_requested_slides(self):
+        called: list[str] = []
+
+        def _slide7(*, xlsx_path: Path, output_dir: Path):
+            called.append("slide7")
+            return [output_dir / "slide7.png"]
+
+        def _slide8(*, xlsx_path: Path, output_dir: Path):
+            called.append("slide8")
+            return [output_dir / "slide8.png"]
+
+        def _slide10(*, xlsx_path: Path, output_dir: Path):
+            called.append("slide10")
+            return [output_dir / "slide10.png"]
+
+        specs = (
+            ChartGeneratorSpec(
+                key="slide7",
+                label="slide 7",
+                generator=_slide7,
+                output_files=("slide7.png",),
+            ),
+            ChartGeneratorSpec(
+                key="slide8",
+                label="slide 8",
+                generator=_slide8,
+                output_files=("slide8.png",),
+            ),
+            ChartGeneratorSpec(
+                key="slide10",
+                label="slide 10",
+                generator=_slide10,
+                output_files=("slide10.png",),
+            ),
+        )
+
+        with patch("presentation_builder._chart_generators", return_value=specs):
+            result = generate_chart_assets(
+                xlsx_path=self.repo_root / "testing.xlsx",
+                images_dir=self.repo_root,
+                only_slides=(1, 8, 10),
+            )
+
+        self.assertEqual(called, ["slide8", "slide10"])
+        self.assertEqual(
+            result.generated_files,
+            (self.repo_root / "slide8.png", self.repo_root / "slide10.png"),
+        )
+
     def test_build_presentation_keeps_running_when_some_charts_fail(self):
         fake_result = (3, 0, 2, [], [], ["slide1_title"])
         chart_failures = (
@@ -189,6 +238,49 @@ class TestPresentationBuilder(unittest.TestCase):
 
         self.assertEqual(result.generated_chart_count, 1)
         self.assertEqual(result.chart_failures, chart_failures)
+
+    def test_build_presentation_uses_isolated_images_dir_for_only_slides(self):
+        fake_result = (3, 0, 2, [], [], ["slide1_title"])
+        captured: dict[str, object] = {}
+
+        def _fake_generate_chart_assets(*, xlsx_path: Path, images_dir: Path, only_slides=None):
+            captured["generate_images_dir"] = images_dir
+            captured["generate_only_slides"] = only_slides
+            return ChartGenerationResult(generated_files=(images_dir / "slide8.png",), failures=())
+
+        def _fake_update_presentation(*, pptx_path, output_path, images_dir, allow_placeholder_text, text_json, text_payload):
+            captured["update_images_dir"] = images_dir
+            return fake_result
+
+        with patch(
+            "presentation_builder._load_validated_workbook",
+        ) as load_workbook_mock:
+            load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
+            with patch(
+                "presentation_builder.generate_chart_assets",
+                side_effect=_fake_generate_chart_assets,
+            ):
+                with patch(
+                    "presentation_builder.build_text_mapping_with_failures",
+                    return_value=TextFieldExtractionResult(
+                        mapping={"slide1_title": "Titulo"},
+                        failures=(),
+                    ),
+                ):
+                    with patch(
+                        "presentation_builder.update_presentation",
+                        side_effect=_fake_update_presentation,
+                    ):
+                        build_presentation(
+                            repo_root=self.repo_root,
+                            cfg=self.cfg,
+                            xlsx_path=self.repo_root / "testing.xlsx",
+                            only_slides=(1, 8),
+                        )
+
+        self.assertEqual(captured["generate_only_slides"], (1, 8))
+        self.assertEqual(captured["generate_images_dir"], captured["update_images_dir"])
+        self.assertNotEqual(captured["generate_images_dir"], self.repo_root)
 
     def test_build_text_mapping_with_failures_preserves_partial_texts(self):
         llm_payload = {

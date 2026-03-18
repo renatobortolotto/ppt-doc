@@ -79,6 +79,15 @@ cd /home/renato/projetos/double-projects/ppt-doc
 MPLCONFIGDIR=/tmp/matplotlib ./.venv/bin/python run_fixed_job.py --xlsx /caminho/para/arquivo.xlsx
 ```
 
+Para testar apenas os graficos de alguns slides, use `--only-slides`. Ele aceita lista e intervalo, como `3,4,7,8` ou `1-8`:
+
+```bash
+cd /home/renato/projetos/double-projects/ppt-doc
+MPLCONFIGDIR=/tmp/matplotlib ./.venv/bin/python run_fixed_job.py --xlsx testing.xlsx --only-slides 1-8
+```
+
+Nesse modo, a geracao de imagens fica isolada em uma pasta temporaria para evitar reaproveitar PNG antigo de outros slides. Os textos do PPT continuam sendo atualizados normalmente.
+
 Se aparecer erro como `BadZipFile: File is not a zip file`, o arquivo informado em `--xlsx` nao e um `.xlsx` valido. Isso costuma acontecer quando o arquivo:
 
 - foi renomeado para `.xlsx`, mas originalmente era `.xls`, `.csv` ou `.html`

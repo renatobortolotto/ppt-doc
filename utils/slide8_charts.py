@@ -539,9 +539,9 @@ def generate_slide8_charts(
     series, values, colors = _reorder_for_stacking(series, values)
     out15 = output_dir / "15_margem_financeira_bruta_total_trimestres.png"
     _plot_stacked_vertical(
-        xlabels=xlabels,
-        series_names=series,
-        values=values,
+        xlabels=["D3:F3"],
+        series_names=["Mercado", "Clientes"],
+        values=["D7:F8"],
         output_path=out15,
         colors=colors,
         font_scale=1.3,

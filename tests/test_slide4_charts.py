@@ -2,7 +2,7 @@ import unittest
 
 from openpyxl import Workbook
 
-from utils.slide4_charts import _extract_slide4_donut_series
+from utils.slide4_charts import _build_slide4_center_text, _extract_slide4_donut_series
 
 
 class TestSlide4Charts(unittest.TestCase):
@@ -56,6 +56,28 @@ class TestSlide4Charts(unittest.TestCase):
             ],
         )
         self.assertEqual(values, [100.0, 200.0, 300.0, 400.0, 120.0, 80.0, 90.0, 110.0])
+
+    def test_build_slide4_center_text_uses_sum_delta_and_placeholder(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Pizza Teste"
+
+        ws["D45"].value = "4T24"
+
+        ws["D47"].value = 40_000
+        ws["D48"].value = 30_000
+        ws["D49"].value = 20_000
+
+        ws["F47"].value = 44_000
+        ws["F48"].value = 33_000
+        ws["F49"].value = 22_000
+
+        text = _build_slide4_center_text(ws)
+
+        self.assertEqual(
+            text,
+            "Carteira\nAmpliada\nR$ 99,0 bi, +10,0% vs 4T24",
+        )
 
 
 if __name__ == "__main__":

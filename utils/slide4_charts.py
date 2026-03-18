@@ -1,14 +1,97 @@
 from __future__ import annotations
 
+import unicodedata
+from collections import OrderedDict
 from pathlib import Path
+
+from openpyxl import load_workbook
+from openpyxl.utils.cell import range_boundaries
 
 from utils.charts_common import (
     ExcelBarChartSpec,
-    ExcelDonutChartSpec,
     close_figure,
     plot_bar_from_excel,
-    plot_donut_from_excel,
+    plot_donut_chart,
 )
+
+
+def _normalize_text(value: object) -> str:
+    text = "" if value is None else str(value)
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    return " ".join(text.strip().lower().split())
+
+
+def _extract_slide4_donut_series(ws, *, source_range: str) -> tuple[list[str], list[str], list[float]]:
+    min_col, min_row, max_col, max_row = range_boundaries(source_range)
+    if min_col == max_col:
+        raise ValueError(f"Range do donut precisa ter ao menos 2 colunas: {source_range}")
+
+    label_col = min_col
+    value_col = max_col
+
+    rules = {
+        "veiculos leves usados": ("Veiculos Leves", "Veiculos Leves Usados"),
+        "corporate": ("Atacado", "Corporate"),
+        "large corporate + instituicoes financeiras": ("Atacado", "Large Corporate + instituicoes financeiras"),
+        "pequenas e medias empresas (pme)": ("Atacado", "Pequenas e Medias Empresas (PME)"),
+        "veiculos pesados e motos": ("Growth", "Outros Veiculos"),
+        "veiculos novos": ("Growth", "Outros Veiculos"),
+        "paineis solares": ("Growth", "Paineis Solares"),
+        "cartao de credito": ("Growth", "Cartões"),
+        "cartoes de credito": ("Growth", "Cartões"),
+        "emprestimos com garantia veicular (egv)": ("Growth", "EGV"),
+        "emprestimos com garantia veicular": ("Growth", "EGV"),
+        "egv": ("Growth", "EGV"),
+    }
+
+    totals: "OrderedDict[tuple[str, str], float]" = OrderedDict()
+    for row in range(min_row, max_row + 1):
+        raw_label = ws.cell(row=row, column=label_col).value
+        raw_value = ws.cell(row=row, column=value_col).value
+        if raw_label is None or raw_value is None:
+            continue
+
+        norm_label = _normalize_text(raw_label)
+        if norm_label not in rules:
+            continue
+
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Valor nao numerico para o donut em {ws.title}!{row}: {raw_value!r}"
+            ) from exc
+
+        category, display_label = rules[norm_label]
+        key = (category, display_label)
+        totals[key] = totals.get(key, 0.0) + value
+
+    ordered_keys = [
+        ("Veiculos Leves", "Veiculos Leves Usados"),
+        ("Atacado", "Corporate"),
+        ("Atacado", "Large Corporate + instituicoes financeiras"),
+        ("Atacado", "Pequenas e Medias Empresas (PME)"),
+        ("Growth", "Outros Veiculos"),
+        ("Growth", "Paineis Solares"),
+        ("Growth", "Cartões"),
+        ("Growth", "EGV"),
+    ]
+
+    categories: list[str] = []
+    labels: list[str] = []
+    values: list[float] = []
+    for key in ordered_keys:
+        if key not in totals:
+            continue
+        categories.append(key[0])
+        labels.append(key[1])
+        values.append(totals[key])
+
+    if not values:
+        raise ValueError(f"Nenhum item mapeado para o donut no range {source_range}")
+
+    return categories, labels, values
 
 
 def generate_slide4_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
@@ -19,19 +102,21 @@ def generate_slide4_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     generated: list[Path] = []
 
     # 10) Grafico de Carteira de Credito Ampliada (donut)
-    fig, _ax = plot_donut_from_excel(
-        ExcelDonutChartSpec(
-            file_path=xlsx_path,
-            sheet_name="Pizza Teste",
-            categories_range="A2:A10",
-            labels_range="B2:B10",
-            values_range="C2:C10",
-            center_text="Carteira\nAmpliada\nR$ 92.7 bi",
-            title=None,
-            output_path=output_dir / "10_pizza_carteira.png",
-            figsize=(16, 12),
-            font_scale=1.5,
-        )
+    wb = load_workbook(filename=xlsx_path, data_only=True)
+    sheet_name = "Pizza Teste"
+    if sheet_name not in wb.sheetnames:
+        raise ValueError(f"Aba nao encontrada: {sheet_name!r}. Disponiveis: {wb.sheetnames}")
+    ws = wb[sheet_name]
+    categories, labels, values = _extract_slide4_donut_series(ws, source_range="C12:F42")
+    fig, _ax = plot_donut_chart(
+        categories=categories,
+        labels=labels,
+        values=values,
+        center_text="Carteira\nAmpliada\nR$ 92.7 bi",
+        title=None,
+        output_path=output_dir / "10_pizza_carteira.png",
+        figsize=(16, 12),
+        font_scale=1.5,
     )
     close_figure(fig)
     generated.append(output_dir / "10_pizza_carteira.png")

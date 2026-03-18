@@ -551,45 +551,43 @@ def plot_line_from_excel(
     return fig, ax
 
 
-def plot_donut_from_excel(spec: ExcelDonutChartSpec) -> Tuple[plt.Figure, plt.Axes]:
+def plot_donut_chart(
+    *,
+    categories: Sequence[str],
+    labels: Sequence[str],
+    values: Sequence[float],
+    center_text: str,
+    output_path: Union[str, Path],
+    title: Optional[str] = None,
+    inner_colors: Optional[List[str]] = None,
+    outer_colors: Optional[List[str]] = None,
+    figsize: Tuple[float, float] = (16, 12),
+    font_scale: float = 1.0,
+) -> Tuple[plt.Figure, plt.Axes]:
     """
-    Generate a nested donut chart from Excel data.
-    
+    Generate a nested donut chart from already prepared series data.
+
     - Outer ring: aggregated categories
     - Inner ring: individual segments with box labels
     """
     from collections import OrderedDict
-    
-    file_path = Path(spec.file_path)
-    if not file_path.exists():
-        raise FileNotFoundError(f"Arquivo não encontrado: {file_path}")
 
-    wb = load_workbook(filename=file_path, data_only=True)
-    if spec.sheet_name not in wb.sheetnames:
-        raise ValueError(f"Aba não encontrada: {spec.sheet_name!r}. Disponíveis: {wb.sheetnames}")
+    categories = [str(cat) for cat in categories]
+    labels = [str(lbl) for lbl in labels]
+    values = [float(val) for val in values]
 
-    ws = wb[spec.sheet_name]
-
-    # Read data from Excel
-    categories_raw = _read_range_row(ws, spec.categories_range)
-    labels_raw = _read_range_row(ws, spec.labels_range)
-    values_raw = _read_range_row(ws, spec.values_range)
-
-    # Filter out empty rows and build lists
-    categories = []
-    labels = []
-    values = []
-    for cat, lbl, val in zip(categories_raw, labels_raw, values_raw):
-        if lbl is not None and val is not None:
-            categories.append(str(cat) if cat else "")
-            labels.append(str(lbl))
-            values.append(float(val) if val else 0.0)
+    if len(categories) != len(labels) or len(labels) != len(values):
+        raise ValueError(
+            f"Tamanhos diferentes no donut: categories={len(categories)} labels={len(labels)} values={len(values)}"
+        )
+    if not values:
+        raise ValueError("Nenhum dado encontrado para gerar o donut")
 
     # Aggregate by category for outer ring
     category_totals = OrderedDict()
     for cat, val in zip(categories, values):
         category_totals[cat] = category_totals.get(cat, 0) + val
-    
+
     cat_labels = list(category_totals.keys())
     cat_values = list(category_totals.values())
 
@@ -646,14 +644,14 @@ def plot_donut_from_excel(spec: ExcelDonutChartSpec) -> Tuple[plt.Figure, plt.Ax
         fallback = ["#1f3a8a", "#b11226", "#0f766e", "#7c3aed", "#f59e0b"]
         return fallback[abs(hash(key)) % len(fallback)]
 
-    if spec.outer_colors:
+    if outer_colors:
         # Keep explicit override (but ensure length matches).
-        outer_colors = list(spec.outer_colors)[: len(cat_labels)]
+        outer_colors = list(outer_colors)[: len(cat_labels)]
     else:
         outer_colors = [_base_color_for_category(cat) for cat in cat_labels]
 
-    if spec.inner_colors:
-        inner_colors = list(spec.inner_colors)[: len(labels)]
+    if inner_colors:
+        inner_colors = list(inner_colors)[: len(labels)]
     else:
         # Generate inner colors as lighter shades within each category palette.
         inner_colors = ["#cccccc"] * len(labels)
@@ -672,10 +670,10 @@ def plot_donut_from_excel(spec: ExcelDonutChartSpec) -> Tuple[plt.Figure, plt.Ax
             for j, idx in enumerate(idxs):
                 inner_colors[idx] = _lighten(base, ts[j])
 
-    font_scale = float(spec.font_scale) if spec.font_scale else 1.0
+    font_scale = float(font_scale) if font_scale else 1.0
 
     # Create figure
-    fig, ax = plt.subplots(figsize=spec.figsize)
+    fig, ax = plt.subplots(figsize=figsize)
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
@@ -783,7 +781,7 @@ def plot_donut_from_excel(spec: ExcelDonutChartSpec) -> Tuple[plt.Figure, plt.Ax
 
     # --- CENTER TEXT ---
     ax.text(
-        0, 0, spec.center_text,
+        0, 0, center_text,
         ha="center", va="center",
         fontsize=14 * font_scale, fontweight="bold",
         linespacing=1.4,
@@ -795,8 +793,8 @@ def plot_donut_from_excel(spec: ExcelDonutChartSpec) -> Tuple[plt.Figure, plt.Ax
         ),
     )
 
-    if spec.title:
-        ax.set_title(spec.title, fontsize=15 * font_scale, fontweight="bold", pad=20)
+    if title:
+        ax.set_title(title, fontsize=15 * font_scale, fontweight="bold", pad=20)
 
     ax.set_aspect('equal')
     ax.set_xlim(-2.2, 2.2)
@@ -804,11 +802,49 @@ def plot_donut_from_excel(spec: ExcelDonutChartSpec) -> Tuple[plt.Figure, plt.Ax
     fig.tight_layout()
 
     # Save to file
-    out = Path(spec.output_path)
+    out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=220, transparent=True, bbox_inches="tight", pad_inches=0.08)
 
     return fig, ax
+
+
+def plot_donut_from_excel(spec: ExcelDonutChartSpec) -> Tuple[plt.Figure, plt.Axes]:
+    file_path = Path(spec.file_path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"Arquivo não encontrado: {file_path}")
+
+    wb = load_workbook(filename=file_path, data_only=True)
+    if spec.sheet_name not in wb.sheetnames:
+        raise ValueError(f"Aba não encontrada: {spec.sheet_name!r}. Disponíveis: {wb.sheetnames}")
+
+    ws = wb[spec.sheet_name]
+
+    categories_raw = _read_range_row(ws, spec.categories_range)
+    labels_raw = _read_range_row(ws, spec.labels_range)
+    values_raw = _read_range_row(ws, spec.values_range)
+
+    categories = []
+    labels = []
+    values = []
+    for cat, lbl, val in zip(categories_raw, labels_raw, values_raw):
+        if lbl is not None and val is not None:
+            categories.append(str(cat) if cat else "")
+            labels.append(str(lbl))
+            values.append(float(val) if val else 0.0)
+
+    return plot_donut_chart(
+        categories=categories,
+        labels=labels,
+        values=values,
+        center_text=spec.center_text,
+        output_path=spec.output_path,
+        title=spec.title,
+        inner_colors=spec.inner_colors,
+        outer_colors=spec.outer_colors,
+        figsize=spec.figsize,
+        font_scale=spec.font_scale,
+    )
 
 
 def close_figure(fig: plt.Figure) -> None:

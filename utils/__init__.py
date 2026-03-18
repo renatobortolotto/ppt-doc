@@ -6,12 +6,14 @@ from utils.charts_common import (
     plot_donut_from_excel,
     plot_line_from_excel,
 )
+from utils.slide4_charts import generate_slide4_charts
 from utils.slide_pizza_charts import generate_pizza_charts
 
 __all__ = [
     "ExcelBarChartSpec",
     "ExcelDonutChartSpec",
     "close_figure",
+    "generate_slide4_charts",
     "generate_pizza_charts",
     "plot_bar_from_excel",
     "plot_donut_from_excel",

@@ -43,6 +43,8 @@ def _fake_workbook() -> _FakeWorkbook:
         (20, 11): 0.1234,
         # B2
         (2, 2): "Texto",
+        # D4
+        (4, 4): 8820,
         # Range C3:D3
         (3, 3): "A",
         (3, 4): "B",
@@ -56,7 +58,7 @@ class TestXlsxTextFields(unittest.TestCase):
     def test_parse_text_fields_object_format(self):
         payload = {
             "default_sheet": "DRE Saida",
-            "fields": {"ROE_RECORRENTE": "K20", "X": {"cell": "B2"}},
+            "fields": {"ROE_RECORRENTE": "K20", "X": {"cell": "B2", "div": 1000}},
         }
 
         with tempfile.TemporaryDirectory() as td:
@@ -69,6 +71,8 @@ class TestXlsxTextFields(unittest.TestCase):
         self.assertEqual(len(specs), 2)
         self.assertEqual(specs[0].id, "ROE_RECORRENTE")
         self.assertEqual(specs[0].a1_range, "K20")
+        self.assertIsNone(specs[0].div)
+        self.assertEqual(specs[1].div, 1000.0)
 
     def test_extract_workbook_text_mapping_single_cell_and_range(self):
         specs = [
@@ -82,6 +86,15 @@ class TestXlsxTextFields(unittest.TestCase):
         self.assertEqual(out["ROE_RECORRENTE"], "0.1234")
         self.assertEqual(out["TEXTO"], "Texto")
         self.assertEqual(out["RANGE"], "A, B")
+
+    def test_extract_workbook_text_mapping_applies_optional_divisor(self):
+        specs = [
+            TextFieldSpec(id="EM_MILHARES", a1_range="D4", sheet="DRE Saida", div=1000),
+        ]
+
+        out = extract_workbook_text_mapping(_fake_workbook(), specs, default_sheet=None)
+
+        self.assertEqual(out["EM_MILHARES"], "8.82")
 
     def test_extract_workbook_text_mapping_sheet_override(self):
         specs = [

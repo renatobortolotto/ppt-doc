@@ -3,6 +3,7 @@
   "fields": {
     "ROE_RECORRENTE": "K20",
     "LUCRO_RECORRENTE": "C18",
-    "TAXA_DESCONTO": {"sheet": "Premissas", "cell": "B2"}
+    "TAXA_DESCONTO": {"sheet": "Premissas", "cell": "B2"},
+    "CARTEIRA_EM_MILHARES": {"sheet": "Premissas", "cell": "B3", "div": 1000}
   }
 }

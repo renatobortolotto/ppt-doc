@@ -20,7 +20,7 @@ from utils.slide7_charts import generate_slide7_charts
 from utils.slide3_charts import generate_slide3_charts
 from utils.slide8_charts import generate_slide8_charts
 from utils.slide9_charts import generate_slide9_charts
-from utils.slide_pizza_charts import generate_pizza_charts
+from utils.slide4_charts import generate_slide4_charts
 from utils.xlsx_extract import _load_workbook as _load_validated_workbook
 from utils.xlsx_text_fields import (
     TextFieldExtractionResult,
@@ -197,9 +197,9 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             ),
         ),
         ChartGeneratorSpec(
-            key="pizza",
-            label="slide pizza",
-            generator=generate_pizza_charts,
+            key="slide4",
+            label="slide 4",
+            generator=generate_slide4_charts,
             output_files=(
                 "10_pizza_carteira.png",
                 "11_pizza_trimestres.png",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -16,6 +17,7 @@ class TextFieldSpec:
     id: str
     a1_range: str
     sheet: Optional[str] = None
+    div: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -38,6 +40,30 @@ def _coerce_cell_value_to_str(value: Any) -> str:
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     return str(value)
+
+
+def _parse_divisor(raw_value: Any, *, field_id: str) -> Optional[float]:
+    if raw_value is None:
+        return None
+    try:
+        divisor = float(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Campo {field_id!r} tem div invalido: {raw_value!r}") from exc
+    if not math.isfinite(divisor) or divisor == 0:
+        raise ValueError(f"Campo {field_id!r} tem div invalido: {raw_value!r}")
+    return divisor
+
+
+def _apply_divisor_to_value(value: Any, *, divisor: Optional[float]) -> Any:
+    if divisor is None or value is None:
+        return value
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value
+    if isinstance(value, (int, float)):
+        return float(value) / float(divisor)
+    return value
 
 
 def parse_text_fields_json(path: Union[str, Path]) -> tuple[Optional[str], List[TextFieldSpec]]:
@@ -80,7 +106,14 @@ def parse_text_fields_json(path: Union[str, Path]) -> tuple[Optional[str], List[
             if not field_id or not a1:
                 raise ValueError("Item precisa ter 'id' e 'cell' (ou 'range')")
 
-            specs.append(TextFieldSpec(id=str(field_id), a1_range=str(a1), sheet=str(sheet) if sheet else None))
+            specs.append(
+                TextFieldSpec(
+                    id=str(field_id),
+                    a1_range=str(a1),
+                    sheet=str(sheet) if sheet else None,
+                    div=_parse_divisor(item.get("div"), field_id=str(field_id)),
+                )
+            )
 
         return default_sheet, specs
 
@@ -101,7 +134,14 @@ def parse_text_fields_json(path: Union[str, Path]) -> tuple[Optional[str], List[
             if not a1:
                 raise ValueError(f"Campo {key!r} precisa ter 'cell' (ou 'range')")
             sheet = value.get("sheet")
-            specs.append(TextFieldSpec(id=str(key), a1_range=str(a1), sheet=str(sheet) if sheet else None))
+            specs.append(
+                TextFieldSpec(
+                    id=str(key),
+                    a1_range=str(a1),
+                    sheet=str(sheet) if sheet else None,
+                    div=_parse_divisor(value.get("div"), field_id=str(key)),
+                )
+            )
             continue
         raise ValueError(f"Campo {key!r} inválido: esperado string ou objeto")
 
@@ -127,7 +167,12 @@ def _extract_text_value_for_spec(
     ws = wb[sheet_name]
     values_2d = xlsx_extract._read_range_2d(ws, spec.a1_range)
     values_1d = xlsx_extract._to_1d(values_2d)
-    pieces = [_coerce_cell_value_to_str(v) for v in values_1d]
+    pieces = [
+        _coerce_cell_value_to_str(
+            _apply_divisor_to_value(v, divisor=spec.div)
+        )
+        for v in values_1d
+    ]
 
     if not pieces:
         return sheet_name, ""
@@ -220,7 +265,9 @@ def _apply_var_formula_fallback(
             continue
         if isinstance(v, str) and v.strip().startswith("="):
             continue
-        out[spec.id] = _coerce_cell_value_to_str(v)
+        out[spec.id] = _coerce_cell_value_to_str(
+            _apply_divisor_to_value(v, divisor=spec.div)
+        )
 
 
 def extract_xlsx_to_text_mapping(

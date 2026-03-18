@@ -19,6 +19,16 @@ e devolve o `.pptx` final.
 - `config/text_fields.json`: mapeamento `TOKEN -> celula A1` e chaves que devem vir do JSON da LLM
 - `utils/`: geradores de graficos e extracao de campos do Excel
 
+Nos campos de texto vindos do Excel, voce tambem pode usar `div` para dividir o valor antes de converter para string. Exemplo:
+
+```json
+{
+  "fields": {
+    "CARTEIRA_EM_MILHARES": {"sheet": "Premissas", "cell": "B3", "div": 1000}
+  }
+}
+```
+
 ## Fluxo atual
 
 1) outro servico recebe o `xlsx` e devolve um JSON no formato de `llm_response.latest.json`

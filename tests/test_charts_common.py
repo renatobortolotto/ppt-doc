@@ -7,6 +7,7 @@ from matplotlib.patches import Wedge
 from openpyxl import Workbook
 
 from utils.charts_common import (
+    _spread_y_positions,
     ExcelBarChartSpec,
     close_figure,
     plot_bar_from_excel,
@@ -17,6 +18,20 @@ from utils.charts_common import (
 
 
 class TestChartsCommon(unittest.TestCase):
+    def test_spread_y_positions_enforces_min_gap(self):
+        placed = _spread_y_positions(
+            [0.20, 0.22, 0.25, 0.90],
+            min_gap=0.15,
+            lower=-1.0,
+            upper=1.0,
+        )
+        self.assertEqual(len(placed), 4)
+        self.assertGreaterEqual(placed[1] - placed[0], 0.15 - 1e-9)
+        self.assertGreaterEqual(placed[2] - placed[1], 0.15 - 1e-9)
+        self.assertGreaterEqual(placed[3] - placed[2], 0.15 - 1e-9)
+        self.assertGreaterEqual(min(placed), -1.0 - 1e-9)
+        self.assertLessEqual(max(placed), 1.0 + 1e-9)
+
     def test_to_float_list_parses_percent_strings(self):
         values = ["9%", " 9 % ", "9,5%", "(10%)"]
         out = to_float_list(values)
@@ -115,8 +130,28 @@ class TestChartsCommon(unittest.TestCase):
             try:
                 wedges = [patch for patch in ax.patches if isinstance(patch, Wedge)]
                 radii = [round(float(wedge.r), 2) for wedge in wedges]
-                self.assertEqual(radii.count(0.74), 2)
-                self.assertEqual(radii.count(1.00), 3)
+                self.assertEqual(radii.count(1.00), 2)
+                self.assertEqual(radii.count(0.70), 3)
+            finally:
+                close_figure(fig)
+
+    def test_plot_donut_chart_can_mirror_horizontally(self):
+        with tempfile.TemporaryDirectory() as td:
+            out_path = Path(td) / "donut-mirror.png"
+
+            fig, ax = plot_donut_chart(
+                categories=["Veiculos Leves", "Growth"],
+                labels=["Veiculos Leves Usados", "EGV"],
+                values=[50, 50],
+                center_text="Centro",
+                output_path=out_path,
+                mirror_horizontal=True,
+            )
+            try:
+                category_ann = next(
+                    text for text in ax.texts if text.get_text().startswith("Veiculos Leves\n")
+                )
+                self.assertLess(category_ann.get_position()[0], 0.0)
             finally:
                 close_figure(fig)
 

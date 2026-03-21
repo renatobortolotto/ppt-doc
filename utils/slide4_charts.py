@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections import OrderedDict
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -78,22 +77,69 @@ def _extract_slide4_donut_series(ws, *, source_range: str) -> tuple[list[str], l
     label_col = min_col
     value_col = max_col
 
-    rules = {
-        "veiculos leves usados": ("Veiculos Leves", "Veiculos Leves Usados"),
-        "corporate": ("Atacado", "Corporate"),
-        "large corporate + instituicoes financeiras": ("Atacado", "Large Corporate + instituicoes financeiras"),
-        "pequenas e medias empresas (pme)": ("Atacado", "Pequenas e Medias Empresas (PME)"),
-        "veiculos pesados e motos": ("Growth", "Outros Veiculos"),
-        "veiculos novos": ("Growth", "Outros Veiculos"),
-        "paineis solares": ("Growth", "Paineis Solares"),
-        "cartao de credito": ("Growth", "Cartões"),
-        "cartoes de credito": ("Growth", "Cartões"),
-        "emprestimos com garantia veicular (egv)": ("Growth", "EGV"),
-        "emprestimos com garantia veicular": ("Growth", "EGV"),
-        "egv": ("Growth", "EGV"),
+    segment_specs = [
+        ("Veiculos Leves", "Veiculos Leves Usados", ("Veiculos Leves Usados",)),
+        (
+            "Growth",
+            "Outros Veiculos",
+            (
+                "Veiculos Pesados",
+                "Veiculos Pesados e Motos",
+                "Motos e Veiculos Novos",
+                "Veiculos Novos",
+            ),
+        ),
+        ("Growth", "Paineis Solares", ("Paineis Solares",)),
+        (
+            "Growth",
+            "EGV",
+            (
+                "Empréstimo com Garantia Vericular (EGV)",
+                "Empréstimos com Garantia Veicular (EGV)",
+                "Empréstimo com Garantia Veicular (EGV)",
+                "Emprestimo com Garantia Vericular (EGV)",
+                "Emprestimo com Garantia Veicular (EGV)",
+                "EGV",
+            ),
+        ),
+        ("Growth", "Cartões", ("Cartão de Crédito", "Cartoes de Credito", "CP")),
+        (
+            "Atacado",
+            "Corporate",
+            (
+                "Corporate",
+                "Avais e Fianças Prestados",
+                "Avais e Fiancas Prestados",
+            ),
+        ),
+        (
+            "Atacado",
+            "Large Corporate + instituicoes financeiras",
+            (
+                "Large Corporate + Instituições Financeiras",
+                "Large Corporate + instituicoes financeiras",
+                "TVM privado",
+                "TVM Privado",
+            ),
+        ),
+        (
+            "Atacado",
+            "Pequenas e Medias Empresas (PME)",
+            (
+                "Pequenas e Médias Empresas",
+                "Pequenas e Medias Empresas",
+                "Pequenas e Médias Empresas (PME)",
+                "Pequenas e Medias Empresas (PME)",
+            ),
+        ),
+    ]
+    known_leaf_labels = {
+        _normalize_text(alias)
+        for _category, _display_label, aliases in segment_specs
+        for alias in aliases
     }
 
-    totals: "OrderedDict[tuple[str, str], float]" = OrderedDict()
+    raw_values_by_label: dict[str, float] = {}
     for row in range(min_row, max_row + 1):
         raw_label = ws.cell(row=row, column=label_col).value
         raw_value = ws.cell(row=row, column=value_col).value
@@ -101,40 +147,38 @@ def _extract_slide4_donut_series(ws, *, source_range: str) -> tuple[list[str], l
             continue
 
         norm_label = _normalize_text(raw_label)
-        if norm_label not in rules:
+        if norm_label not in known_leaf_labels:
             continue
-
         try:
-            value = float(raw_value)
+            value = to_float_list([raw_value])[0]
         except (TypeError, ValueError) as exc:
             raise ValueError(
                 f"Valor nao numerico para o donut em {ws.title}!{row}: {raw_value!r}"
             ) from exc
 
-        category, display_label = rules[norm_label]
-        key = (category, display_label)
-        totals[key] = totals.get(key, 0.0) + value
+        raw_values_by_label[norm_label] = raw_values_by_label.get(norm_label, 0.0) + value
 
-    ordered_keys = [
-        ("Veiculos Leves", "Veiculos Leves Usados"),
-        ("Atacado", "Corporate"),
-        ("Atacado", "Large Corporate + instituicoes financeiras"),
-        ("Atacado", "Pequenas e Medias Empresas (PME)"),
-        ("Growth", "Outros Veiculos"),
-        ("Growth", "Paineis Solares"),
-        ("Growth", "Cartões"),
-        ("Growth", "EGV"),
-    ]
+    def _sum_labels(*aliases: str) -> float:
+        total = 0.0
+        seen_aliases: set[str] = set()
+        for alias in aliases:
+            normalized_alias = _normalize_text(alias)
+            if normalized_alias in seen_aliases:
+                continue
+            seen_aliases.add(normalized_alias)
+            total += raw_values_by_label.get(normalized_alias, 0.0)
+        return total
 
     categories: list[str] = []
     labels: list[str] = []
     values: list[float] = []
-    for key in ordered_keys:
-        if key not in totals:
+    for category, display_label, aliases in segment_specs:
+        value = _sum_labels(*aliases)
+        if abs(value) <= 1e-12:
             continue
-        categories.append(key[0])
-        labels.append(key[1])
-        values.append(totals[key])
+        categories.append(category)
+        labels.append(display_label)
+        values.append(value)
 
     if not values:
         raise ValueError(f"Nenhum item mapeado para o donut no range {source_range}")
@@ -151,12 +195,22 @@ def generate_slide4_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
 
     # 10) Grafico de Carteira de Credito Ampliada (donut)
     wb = load_workbook(filename=xlsx_path, data_only=True)
-    sheet_name = "Pizza Teste"
-    if sheet_name not in wb.sheetnames:
-        raise ValueError(f"Aba nao encontrada: {sheet_name!r}. Disponiveis: {wb.sheetnames}")
-    ws = wb[sheet_name]
-    categories, labels, values = _extract_slide4_donut_series(ws, source_range="C12:F42")
-    center_text = _build_slide4_center_text(ws)
+    donut_sheet_name = "Carteira"
+    if donut_sheet_name not in wb.sheetnames:
+        raise ValueError(f"Aba nao encontrada: {donut_sheet_name!r}. Disponiveis: {wb.sheetnames}")
+    donut_ws = wb[donut_sheet_name]
+    categories, labels, values = _extract_slide4_donut_series(donut_ws, source_range="C12:F36")
+
+    center_text_ws = donut_ws
+    if all(
+        center_text_ws[cell_ref].value in (None, "")
+        for cell_ref in ("D45", "D47", "D48", "D49", "F47", "F48", "F49")
+    ):
+        if "Pizza Teste" not in wb.sheetnames:
+            raise ValueError("Nao foi possivel localizar a aba com os dados centrais do donut.")
+        center_text_ws = wb["Pizza Teste"]
+
+    center_text = _build_slide4_center_text(center_text_ws)
     fig, _ax = plot_donut_chart(
         categories=categories,
         labels=labels,
@@ -166,6 +220,7 @@ def generate_slide4_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         output_path=output_dir / "10_pizza_carteira.png",
         figsize=(16, 12),
         font_scale=1.5,
+        mirror_horizontal=True,
     )
     close_figure(fig)
     generated.append(output_dir / "10_pizza_carteira.png")

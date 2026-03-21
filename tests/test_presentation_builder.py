@@ -264,6 +264,11 @@ class TestPresentationBuilder(unittest.TestCase):
             captured["update_pp_field_ids"] = pp_field_ids
             return fake_result
 
+        def _fake_persist_generated_chart_files(*, generated_files, target_dir):
+            captured["persist_generated_files"] = generated_files
+            captured["persist_target_dir"] = target_dir
+            return tuple(target_dir / Path(path).name for path in generated_files)
+
         with patch(
             "presentation_builder._load_validated_workbook",
         ) as load_workbook_mock:
@@ -291,17 +296,23 @@ class TestPresentationBuilder(unittest.TestCase):
                             "presentation_builder.update_presentation",
                             side_effect=_fake_update_presentation,
                         ):
-                            build_presentation(
-                                repo_root=self.repo_root,
-                                cfg=self.cfg,
-                                xlsx_path=self.repo_root / "testing.xlsx",
-                                only_slides=(1, 8),
-                            )
+                            with patch(
+                                "presentation_builder._persist_generated_chart_files",
+                                side_effect=_fake_persist_generated_chart_files,
+                            ):
+                                build_presentation(
+                                    repo_root=self.repo_root,
+                                    cfg=self.cfg,
+                                    xlsx_path=self.repo_root / "testing.xlsx",
+                                    only_slides=(1, 8),
+                                )
 
         self.assertEqual(captured["generate_only_slides"], (1, 8))
         self.assertEqual(captured["generate_images_dir"], captured["update_images_dir"])
         self.assertNotEqual(captured["generate_images_dir"], self.repo_root)
         self.assertEqual(captured["update_pp_field_ids"], ("VAR_TEST",))
+        self.assertEqual(captured["persist_generated_files"], (captured["generate_images_dir"] / "slide8.png",))
+        self.assertEqual(captured["persist_target_dir"], self.repo_root)
 
     def test_build_text_mapping_with_failures_preserves_partial_texts(self):
         llm_payload = {

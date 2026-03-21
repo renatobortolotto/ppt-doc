@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -379,6 +380,35 @@ def generate_chart_assets(
     )
 
 
+def _persist_generated_chart_files(
+    *,
+    generated_files: Sequence[Path],
+    target_dir: Path,
+) -> tuple[Path, ...]:
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    persisted_files: list[Path] = []
+    for generated_file in generated_files:
+        source = Path(generated_file)
+        destination = target_dir / source.name
+
+        try:
+            if source.resolve() == destination.resolve():
+                persisted_files.append(destination)
+                continue
+        except FileNotFoundError:
+            logging.warning(
+                "Grafico gerado nao encontrado para copiar para images_dir: %s",
+                source,
+            )
+            continue
+
+        shutil.copy2(source, destination)
+        persisted_files.append(destination)
+
+    return tuple(persisted_files)
+
+
 def _validate_xlsx_path(xlsx_path: Path) -> None:
     try:
         wb = _load_validated_workbook(filename=xlsx_path, data_only=True)
@@ -443,6 +473,11 @@ def build_presentation(
             )
             generated_chart_count = len(chart_generation.generated_files)
             chart_failures = chart_generation.failures
+            if active_images_dir != effective_images_dir:
+                _persist_generated_chart_files(
+                    generated_files=chart_generation.generated_files,
+                    target_dir=effective_images_dir,
+                )
 
         text_mapping_result = build_text_mapping_with_failures(
             repo_root=repo_root,

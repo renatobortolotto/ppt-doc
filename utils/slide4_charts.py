@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import unicodedata
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -14,14 +13,6 @@ from utils.charts_common import (
     plot_donut_chart,
     to_float_list,
 )
-
-
-def _normalize_text(value: object) -> str:
-    text = "" if value is None else str(value)
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    return " ".join(text.strip().lower().split())
-
 
 def _format_pt_number(value: float, *, decimals: int = 1) -> str:
     return f"{float(value):.{int(decimals)}f}".replace(".", ",")
@@ -69,111 +60,42 @@ def _build_slide4_center_text(
     return _resolve_cell_placeholders(ws, text)
 
 
+SLIDE4_DONUT_ROW_SPECS: tuple[tuple[str, str, tuple[int, ...]], ...] = (
+    ("Veiculos Leves", "Veiculos Leves Usados", (16,)),
+    ("Growth", "Outros Veiculos", (17, 18)),
+    ("Growth", "Paineis Solares", (19,)),
+    ("Growth", "EGV", (23,)),
+    ("Growth", "Cartões", (24, 25)),
+    ("Atacado", "Corporate", (28, 35)),
+    ("Atacado", "Large Corporate + instituicoes financeiras", (29, 36)),
+    ("Atacado", "Pequenas e Medias Empresas (PME)", (30,)),
+)
+
+
 def _extract_slide4_donut_series(ws, *, source_range: str) -> tuple[list[str], list[str], list[float]]:
     min_col, min_row, max_col, max_row = range_boundaries(source_range)
     if min_col == max_col:
         raise ValueError(f"Range do donut precisa ter ao menos 2 colunas: {source_range}")
 
-    label_col = min_col
     value_col = max_col
-
-    segment_specs = [
-        ("Veiculos Leves", "Veiculos Leves Usados", ("Veiculos Leves Usados",)),
-        (
-            "Growth",
-            "Outros Veiculos",
-            (
-                "Veiculos Pesados",
-                "Veiculos Pesados e Motos",
-                "Motos e Veiculos Novos",
-                "Veiculos Novos",
-            ),
-        ),
-        ("Growth", "Paineis Solares", ("Paineis Solares",)),
-        (
-            "Growth",
-            "EGV",
-            (
-                "Empréstimo com Garantia Vericular (EGV)",
-                "Empréstimos com Garantia Veicular (EGV)",
-                "Empréstimo com Garantia Veicular (EGV)",
-                "Emprestimo com Garantia Vericular (EGV)",
-                "Emprestimo com Garantia Veicular (EGV)",
-                "EGV",
-            ),
-        ),
-        ("Growth", "Cartões", ("Cartão de Crédito", "Cartoes de Credito", "CP")),
-        (
-            "Atacado",
-            "Corporate",
-            (
-                "Corporate",
-                "Avais e Fianças Prestados",
-                "Avais e Fiancas Prestados",
-            ),
-        ),
-        (
-            "Atacado",
-            "Large Corporate + instituicoes financeiras",
-            (
-                "Large Corporate + Instituições Financeiras",
-                "Large Corporate + instituicoes financeiras",
-                "TVM privado",
-                "TVM Privado",
-            ),
-        ),
-        (
-            "Atacado",
-            "Pequenas e Medias Empresas (PME)",
-            (
-                "Pequenas e Médias Empresas",
-                "Pequenas e Medias Empresas",
-                "Pequenas e Médias Empresas (PME)",
-                "Pequenas e Medias Empresas (PME)",
-            ),
-        ),
-    ]
-    known_leaf_labels = {
-        _normalize_text(alias)
-        for _category, _display_label, aliases in segment_specs
-        for alias in aliases
-    }
-
-    raw_values_by_label: dict[str, float] = {}
-    for row in range(min_row, max_row + 1):
-        raw_label = ws.cell(row=row, column=label_col).value
-        raw_value = ws.cell(row=row, column=value_col).value
-        if raw_label is None or raw_value is None:
-            continue
-
-        norm_label = _normalize_text(raw_label)
-        if norm_label not in known_leaf_labels:
-            continue
-        try:
-            value = to_float_list([raw_value])[0]
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                f"Valor nao numerico para o donut em {ws.title}!{row}: {raw_value!r}"
-            ) from exc
-
-        raw_values_by_label[norm_label] = raw_values_by_label.get(norm_label, 0.0) + value
-
-    def _sum_labels(*aliases: str) -> float:
-        total = 0.0
-        seen_aliases: set[str] = set()
-        for alias in aliases:
-            normalized_alias = _normalize_text(alias)
-            if normalized_alias in seen_aliases:
-                continue
-            seen_aliases.add(normalized_alias)
-            total += raw_values_by_label.get(normalized_alias, 0.0)
-        return total
 
     categories: list[str] = []
     labels: list[str] = []
     values: list[float] = []
-    for category, display_label, aliases in segment_specs:
-        value = _sum_labels(*aliases)
+    for category, display_label, rows in SLIDE4_DONUT_ROW_SPECS:
+        row_values: list[object] = []
+        for row in rows:
+            if row < min_row or row > max_row:
+                continue
+            row_values.append(ws.cell(row=row, column=value_col).value)
+        if not row_values:
+            continue
+        try:
+            value = float(sum(to_float_list(row_values)))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"Valor nao numerico para o donut em {ws.title}!{display_label}: {row_values!r}"
+            ) from exc
         if abs(value) <= 1e-12:
             continue
         categories.append(category)

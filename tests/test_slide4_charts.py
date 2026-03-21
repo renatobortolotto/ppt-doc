@@ -6,28 +6,31 @@ from utils.slide4_charts import _build_slide4_center_text, _extract_slide4_donut
 
 
 class TestSlide4Charts(unittest.TestCase):
-    def test_extract_slide4_donut_series_groups_complex_range(self):
+    def test_extract_slide4_donut_series_groups_by_fixed_rows_even_with_unexpected_labels(self):
         wb = Workbook()
         ws = wb.active
-        ws.title = "Pizza Teste"
+        ws.title = "Carteira"
 
-        rows = [
-            ("Veiculos Leves Usados", 100.0),
-            ("Corporate", 200.0),
-            ("Large Corporate + instituições financeiras", 300.0),
-            ("Pequenas e Médias Empresas (PME)", 400.0),
-            ("Veiculos Pesados e Motos", 50.0),
-            ("Veiculos Novos", 70.0),
-            ("Paineis Solares", 80.0),
-            ("Cartão de Crédito", 90.0),
-            ("Empréstimos com Garantia Veicular (EGV)", 110.0),
-        ]
+        rows = {
+            16: ("qualquer texto 1", 100.0),
+            17: ("qualquer texto 2", 50.0),
+            18: ("qualquer texto 3", 70.0),
+            19: ("qualquer texto 4", 80.0),
+            23: ("qualquer texto 5", 110.0),
+            24: ("qualquer texto 6", 90.0),
+            25: ("qualquer texto 7", 10.0),
+            28: ("qualquer texto 8", 200.0),
+            29: ("qualquer texto 9", 300.0),
+            30: ("qualquer texto 10", 400.0),
+            35: ("qualquer texto 11", 20.0),
+            36: ("qualquer texto 12", 30.0),
+        }
 
-        for idx, (label, value) in enumerate(rows, start=12):
-            ws.cell(row=idx, column=3).value = label
-            ws.cell(row=idx, column=6).value = value
+        for row, (label, value) in rows.items():
+            ws.cell(row=row, column=3).value = label
+            ws.cell(row=row, column=6).value = value
 
-        categories, labels, values = _extract_slide4_donut_series(ws, source_range="C12:F20")
+        categories, labels, values = _extract_slide4_donut_series(ws, source_range="C12:F36")
 
         self.assertEqual(
             categories,
@@ -55,7 +58,7 @@ class TestSlide4Charts(unittest.TestCase):
                 "Pequenas e Medias Empresas (PME)",
             ],
         )
-        self.assertEqual(values, [100.0, 120.0, 80.0, 110.0, 90.0, 200.0, 300.0, 400.0])
+        self.assertEqual(values, [100.0, 120.0, 80.0, 110.0, 100.0, 220.0, 330.0, 400.0])
 
     def test_build_slide4_center_text_uses_sum_delta_and_placeholder(self):
         wb = Workbook()

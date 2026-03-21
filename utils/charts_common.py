@@ -857,18 +857,19 @@ def plot_donut_chart(
         )
 
     # --- CENTER TEXT ---
-    ax.text(
-        0, 0, center_text,
-        ha="center", va="center",
-        fontsize=14 * font_scale, fontweight="bold",
-        linespacing=1.4,
-        bbox=dict(
-            boxstyle="circle,pad=0.5",
-            facecolor="white",
-            edgecolor="lightgray",
-            linewidth=1,
-        ),
-    )
+    if str(center_text).strip():
+        ax.text(
+            0, 0, center_text,
+            ha="center", va="center",
+            fontsize=14 * font_scale, fontweight="bold",
+            linespacing=1.4,
+            bbox=dict(
+                boxstyle="circle,pad=0.5",
+                facecolor="white",
+                edgecolor="lightgray",
+                linewidth=1,
+            ),
+        )
 
     if title:
         ax.set_title(title, fontsize=15 * font_scale, fontweight="bold", pad=20)

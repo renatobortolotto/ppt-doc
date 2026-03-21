@@ -200,22 +200,11 @@ def generate_slide4_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         raise ValueError(f"Aba nao encontrada: {donut_sheet_name!r}. Disponiveis: {wb.sheetnames}")
     donut_ws = wb[donut_sheet_name]
     categories, labels, values = _extract_slide4_donut_series(donut_ws, source_range="C12:F36")
-
-    center_text_ws = donut_ws
-    if all(
-        center_text_ws[cell_ref].value in (None, "")
-        for cell_ref in ("D45", "D47", "D48", "D49", "F47", "F48", "F49")
-    ):
-        if "Pizza Teste" not in wb.sheetnames:
-            raise ValueError("Nao foi possivel localizar a aba com os dados centrais do donut.")
-        center_text_ws = wb["Pizza Teste"]
-
-    center_text = _build_slide4_center_text(center_text_ws)
     fig, _ax = plot_donut_chart(
         categories=categories,
         labels=labels,
         values=values,
-        center_text=center_text,
+        center_text="",
         title=None,
         output_path=output_dir / "10_pizza_carteira.png",
         figsize=(16, 12),

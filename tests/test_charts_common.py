@@ -155,6 +155,26 @@ class TestChartsCommon(unittest.TestCase):
             finally:
                 close_figure(fig)
 
+    def test_plot_donut_chart_skips_center_text_when_blank(self):
+        with tempfile.TemporaryDirectory() as td:
+            out_path = Path(td) / "donut-no-center.png"
+
+            fig, ax = plot_donut_chart(
+                categories=["Veiculos Leves", "Growth"],
+                labels=["Veiculos Leves Usados", "EGV"],
+                values=[50, 50],
+                center_text="",
+                output_path=out_path,
+            )
+            try:
+                center_texts = [
+                    text for text in ax.texts
+                    if text.get_position() == (0, 0) and str(text.get_text()).strip()
+                ]
+                self.assertEqual(center_texts, [])
+            finally:
+                close_figure(fig)
+
 
 if __name__ == "__main__":
     unittest.main()

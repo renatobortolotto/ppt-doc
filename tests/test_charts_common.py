@@ -3,9 +3,17 @@ import unittest
 import tempfile
 from pathlib import Path
 
+from matplotlib.patches import Wedge
 from openpyxl import Workbook
 
-from utils.charts_common import ExcelBarChartSpec, close_figure, plot_bar_from_excel, plot_line_from_excel, to_float_list
+from utils.charts_common import (
+    ExcelBarChartSpec,
+    close_figure,
+    plot_bar_from_excel,
+    plot_donut_chart,
+    plot_line_from_excel,
+    to_float_list,
+)
 
 
 class TestChartsCommon(unittest.TestCase):
@@ -90,6 +98,25 @@ class TestChartsCommon(unittest.TestCase):
             try:
                 labels = [t.get_text() for t in ax.texts]
                 self.assertEqual(labels, ["8,8", "9,1"])
+            finally:
+                close_figure(fig)
+
+    def test_plot_donut_chart_keeps_group_ring_inside_detail_ring(self):
+        with tempfile.TemporaryDirectory() as td:
+            out_path = Path(td) / "donut.png"
+
+            fig, ax = plot_donut_chart(
+                categories=["A", "B", "B"],
+                labels=["A1", "B1", "B2"],
+                values=[10, 20, 30],
+                center_text="Centro",
+                output_path=out_path,
+            )
+            try:
+                wedges = [patch for patch in ax.patches if isinstance(patch, Wedge)]
+                radii = [round(float(wedge.r), 2) for wedge in wedges]
+                self.assertEqual(radii.count(0.74), 2)
+                self.assertEqual(radii.count(1.00), 3)
             finally:
                 close_figure(fig)
 

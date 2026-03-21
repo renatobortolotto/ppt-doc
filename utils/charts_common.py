@@ -103,7 +103,7 @@ class ExcelBarChartSpec:
 
 @dataclass(frozen=True)
 class ExcelDonutChartSpec:
-    """Spec for a nested donut chart with categories (outer) and segments (inner)."""
+    """Spec for a nested donut chart with grouped categories and detailed segments."""
     file_path: Union[str, Path]
     sheet_name: str
     # Range with segment labels (column B in the example)
@@ -567,8 +567,8 @@ def plot_donut_chart(
     """
     Generate a nested donut chart from already prepared series data.
 
-    - Outer ring: aggregated categories
-    - Inner ring: individual segments with box labels
+    - Inner ring: aggregated categories
+    - Outer ring: individual segments with box labels
     """
     from collections import OrderedDict
 
@@ -628,7 +628,7 @@ def plot_donut_chart(
         b2 = b + (1.0 - b) * t
         return _rgb_to_hex((r2, g2, b2))
 
-    # Palette by top-level category (outer ring). Outer stays darkest; inner uses lighter shades.
+    # Palette by top-level category. Category ring stays darkest; segment ring uses lighter shades.
     # NOTE: normalize to match variants like "Veículos" vs "Veiculos".
     base_by_category = {
         "veiculos leves": "#1f3a8a",  # navy (dark)
@@ -645,16 +645,15 @@ def plot_donut_chart(
         return fallback[abs(hash(key)) % len(fallback)]
 
     if outer_colors:
-        # Keep explicit override (but ensure length matches).
-        outer_colors = list(outer_colors)[: len(cat_labels)]
+        category_colors = list(outer_colors)[: len(cat_labels)]
     else:
-        outer_colors = [_base_color_for_category(cat) for cat in cat_labels]
+        category_colors = [_base_color_for_category(cat) for cat in cat_labels]
 
     if inner_colors:
-        inner_colors = list(inner_colors)[: len(labels)]
+        segment_colors = list(inner_colors)[: len(labels)]
     else:
-        # Generate inner colors as lighter shades within each category palette.
-        inner_colors = ["#cccccc"] * len(labels)
+        # Generate segment colors as lighter shades within each category palette.
+        segment_colors = ["#cccccc"] * len(labels)
         cat_to_indices: "OrderedDict[str, List[int]]" = OrderedDict()
         for idx, cat in enumerate(categories):
             cat_to_indices.setdefault(cat, []).append(idx)
@@ -665,10 +664,10 @@ def plot_donut_chart(
             if m <= 1:
                 ts = [0.40]
             else:
-                # Keep inner segments noticeably lighter than the outer ring.
+                # Keep outer detailed segments lighter than the grouped inner ring.
                 ts = list(np.linspace(0.18, 0.68, num=m))
             for j, idx in enumerate(idxs):
-                inner_colors[idx] = _lighten(base, ts[j])
+                segment_colors[idx] = _lighten(base, ts[j])
 
     font_scale = float(font_scale) if font_scale else 1.0
 
@@ -677,40 +676,47 @@ def plot_donut_chart(
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    # --- OUTER RING (Categories) ---
-    outer_result = ax.pie(
+    # Hierarchical donut: grouped categories on the inside, detailed segments on the outside.
+    category_radius = 0.74
+    category_width = 0.22
+    segment_radius = 1.00
+    segment_width = 0.24
+
+    # --- INNER RING (Categories) ---
+    category_result = ax.pie(
         cat_values,
         startangle=90,
         counterclock=False,
-        colors=outer_colors,
-        wedgeprops=dict(width=0.25, edgecolor="white", linewidth=2),
-        radius=1.0,
+        colors=category_colors,
+        wedgeprops=dict(width=category_width, edgecolor="white", linewidth=2),
+        radius=category_radius,
     )
-    outer_wedges = outer_result[0]
+    category_wedges = category_result[0]
 
-    # --- INNER RING (Segments) ---
-    inner_result = ax.pie(
+    # --- OUTER RING (Segments) ---
+    segment_result = ax.pie(
         values,
         startangle=90,
         counterclock=False,
-        colors=inner_colors,
-        wedgeprops=dict(width=0.30, edgecolor="white", linewidth=1),
-        radius=0.70,
+        colors=segment_colors,
+        wedgeprops=dict(width=segment_width, edgecolor="white", linewidth=1.2),
+        radius=segment_radius,
     )
-    inner_wedges = inner_result[0]
+    segment_wedges = segment_result[0]
 
-    # --- CATEGORY LABELS (outer ring) with boxes ---
+    # --- CATEGORY LABELS (inner ring) with boxes ---
     outer_total = sum(cat_values)
-    for i, (wedge, label, value, color) in enumerate(zip(outer_wedges, cat_labels, cat_values, outer_colors)):
+    category_anchor_radius = category_radius - (category_width / 2.0)
+    for wedge, label, value, color in zip(category_wedges, cat_labels, cat_values, category_colors):
         ang = (wedge.theta2 + wedge.theta1) / 2
         pct = value / outer_total * 100
 
         # Special adjustment for "Veiculos Leves" to avoid overlap
         if "Veiculos" in label or "Veículos" in label:
-            r = 1.35
+            r = 1.22
             ang_adjusted = ang + 15
         else:
-            r = 1.18
+            r = 1.02
             ang_adjusted = ang
 
         x = r * np.cos(np.deg2rad(ang_adjusted))
@@ -718,7 +724,10 @@ def plot_donut_chart(
 
         ax.annotate(
             f"{label}\n{pct:.0f}%",
-            xy=(0.9 * np.cos(np.deg2rad(ang)), 0.9 * np.sin(np.deg2rad(ang))),
+            xy=(
+                category_anchor_radius * np.cos(np.deg2rad(ang)),
+                category_anchor_radius * np.sin(np.deg2rad(ang)),
+            ),
             xytext=(x, y),
             fontsize=10 * font_scale,
             fontweight="bold",
@@ -738,22 +747,23 @@ def plot_donut_chart(
             ),
         )
 
-    # --- SEGMENT LABELS (inner ring) with boxes ---
+    # --- SEGMENT LABELS (outer ring) with boxes ---
     inner_total = sum(values)
-    for i, (wedge, label, value, color) in enumerate(zip(inner_wedges, labels, values, inner_colors)):
+    segment_anchor_radius = segment_radius - (segment_width / 2.0)
+    for wedge, label, value, color in zip(segment_wedges, labels, values, segment_colors):
         ang = (wedge.theta2 + wedge.theta1) / 2
         pct = value / inner_total * 100
 
-        r_start = 0.55
+        r_start = segment_anchor_radius
         x_start = r_start * np.cos(np.deg2rad(ang))
         y_start = r_start * np.sin(np.deg2rad(ang))
 
         # Special adjustment for "Veiculos Leves Usados" to avoid overlap
         if "Usados" in label:
-            r_end = 1.65
+            r_end = 1.78
             ang_adjusted = ang - 15
         else:
-            r_end = 1.50
+            r_end = 1.58
             ang_adjusted = ang
 
         x_end = r_end * np.cos(np.deg2rad(ang_adjusted))
@@ -797,8 +807,8 @@ def plot_donut_chart(
         ax.set_title(title, fontsize=15 * font_scale, fontweight="bold", pad=20)
 
     ax.set_aspect('equal')
-    ax.set_xlim(-2.2, 2.2)
-    ax.set_ylim(-2.0, 2.0)
+    ax.set_xlim(-2.25, 2.25)
+    ax.set_ylim(-2.05, 2.05)
     fig.tight_layout()
 
     # Save to file

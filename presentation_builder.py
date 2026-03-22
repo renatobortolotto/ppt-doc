@@ -26,7 +26,6 @@ from utils.xlsx_extract import _load_workbook as _load_validated_workbook
 from utils.xlsx_text_fields import (
     TextFieldExtractionResult,
     TextFieldFailure,
-    extract_xlsx_to_text_mapping,
     extract_xlsx_to_text_mapping_tolerant,
     parse_text_fields_json,
 )

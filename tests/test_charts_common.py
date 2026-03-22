@@ -155,6 +155,34 @@ class TestChartsCommon(unittest.TestCase):
             finally:
                 close_figure(fig)
 
+    def test_plot_donut_chart_places_growth_labels_closer_to_donut(self):
+        with tempfile.TemporaryDirectory() as td:
+            out_path = Path(td) / "donut-growth.png"
+
+            fig, ax = plot_donut_chart(
+                categories=["Veiculos Leves", "Growth", "Growth", "Atacado"],
+                labels=["Veiculos Leves Usados", "EGV", "Cartões", "Corporate"],
+                values=[40, 20, 15, 25],
+                center_text="",
+                output_path=out_path,
+                mirror_horizontal=True,
+            )
+            try:
+                growth_category_ann = next(
+                    text for text in ax.texts if text.get_text().startswith("Growth\n")
+                )
+                egv_ann = next(
+                    text for text in ax.texts if text.get_text().startswith("EGV\n")
+                )
+                cartoes_ann = next(
+                    text for text in ax.texts if text.get_text().startswith("Cartões\n")
+                )
+                self.assertLess(abs(growth_category_ann.get_position()[0]), 1.0)
+                self.assertLess(abs(egv_ann.get_position()[0]), 1.5)
+                self.assertLess(abs(cartoes_ann.get_position()[0]), 1.5)
+            finally:
+                close_figure(fig)
+
     def test_plot_donut_chart_skips_center_text_when_blank(self):
         with tempfile.TemporaryDirectory() as td:
             out_path = Path(td) / "donut-no-center.png"

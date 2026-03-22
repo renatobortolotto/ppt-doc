@@ -749,7 +749,7 @@ def plot_donut_chart(
     outer_total = sum(cat_values)
     category_fixed_positions = {
         "veiculos leves": (1.58, 0.72),
-        "growth": (-1.02, -0.10),
+        "growth": (-0.88, -0.10),
         "atacado": (-0.62, 1.02),
     }
     for wedge, label, value, color in zip(category_wedges, cat_labels, cat_values, category_colors):
@@ -790,7 +790,13 @@ def plot_donut_chart(
     # --- SEGMENT LABELS (inner ring) with boxes ---
     inner_total = sum(values)
     segment_items: list[dict[str, object]] = []
-    for wedge, label, value, color in zip(segment_wedges, labels, values, segment_colors):
+    for wedge, category, label, value, color in zip(
+        segment_wedges,
+        categories,
+        labels,
+        values,
+        segment_colors,
+    ):
         ang = (wedge.theta2 + wedge.theta1) / 2
         pct = value / inner_total * 100
 
@@ -798,10 +804,15 @@ def plot_donut_chart(
         x_start = r_start * np.cos(np.deg2rad(ang))
         y_start = r_start * np.sin(np.deg2rad(ang))
         side = "right" if np.cos(np.deg2rad(ang)) >= 0 else "left"
-        desired_x = 1.62 if side == "right" else -1.62
+        label_key = _norm_text(category)
+        if label_key == "growth":
+            desired_x = 1.42 if side == "right" else -1.42
+        else:
+            desired_x = 1.62 if side == "right" else -1.62
         desired_y = 1.52 * np.sin(np.deg2rad(ang))
         segment_items.append(
             {
+                "category": category,
                 "label": label,
                 "pct": pct,
                 "color": color,

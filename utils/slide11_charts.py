@@ -147,12 +147,13 @@ def _plot_stacked_expenses(
 
     totals = bottom.copy()
     total_label_tops: list[float] = []
+    total_label_artists = []
     for i, total in enumerate(totals):
         if not np.isfinite(total):
             continue
         y_label = float(total) + max(abs(float(total)) * 0.02, 0.6)
         total_label_tops.append(y_label)
-        ax.text(
+        text_artist = ax.text(
             float(x[i]),
             y_label,
             _fmt_int(total),
@@ -164,6 +165,7 @@ def _plot_stacked_expenses(
             zorder=5,
             clip_on=False,
         )
+        total_label_artists.append(text_artist)
 
     # Brackets/deltas no topo para pares consecutivos, alinhados.
     if n >= 2:
@@ -172,6 +174,13 @@ def _plot_stacked_expenses(
         bracket_h = max(abs_max * 0.035, 0.8)
         top_labels_max = max(total_label_tops) if total_label_tops else float(np.nanmax(totals))
         top_base = float(top_labels_max) + max(abs_max * 0.20, 2.0)
+        if total_label_artists:
+            fig.canvas.draw()
+            renderer = fig.canvas.get_renderer()
+            highest_label_display_y = max(
+                artist.get_window_extent(renderer=renderer).y1 for artist in total_label_artists
+            )
+            top_base = ax.transData.inverted().transform((0.0, highest_label_display_y + 28.0))[1]
         max_text_y: float | None = None
 
         for i in range(1, n):

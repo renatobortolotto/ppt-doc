@@ -22,6 +22,77 @@ def _fmt_int(v: float) -> str:
     return f"{float(v):,.0f}".replace(",", ".")
 
 
+def _wrap_words(text: str, *, max_line_len: int = 16) -> str:
+    s = (text or "").strip()
+    if not s:
+        return ""
+
+    words = s.split()
+    lines: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for word in words:
+        word_len = len(word)
+        if not current:
+            current = [word]
+            current_len = word_len
+            continue
+
+        if current_len + 1 + word_len <= max_line_len:
+            current.append(word)
+            current_len += 1 + word_len
+            continue
+
+        lines.append(" ".join(current))
+        current = [word]
+        current_len = word_len
+
+    if current:
+        lines.append(" ".join(current))
+
+    return "\n".join(lines)
+
+
+def _is_blank(value: object) -> bool:
+    return value is None or (isinstance(value, str) and value.strip() == "")
+
+
+def _read_named_series_rows(
+    ws,
+    *,
+    xlabels_range: str,
+    series_specs: list[tuple[str, str]],
+) -> tuple[list[str], list[str], np.ndarray]:
+    raw_xlabels = _read_range_row(ws, xlabels_range)
+    if all(_is_blank(value) for value in raw_xlabels):
+        raise ValueError(f"Range sem labels para gráfico em {ws.title}!{xlabels_range}")
+
+    xlabels = [("" if v is None else str(v)).strip() for v in raw_xlabels]
+    point_count = len(xlabels)
+    if point_count == 0:
+        raise ValueError(f"Sem labels para gráfico em {ws.title}!{xlabels_range}")
+
+    series_names: list[str] = []
+    series_columns: list[list[float]] = []
+    for series_name, values_range in series_specs:
+        raw_values = _read_range_row(ws, values_range)
+        if all(_is_blank(value) for value in raw_values):
+            raise ValueError(f"Range sem dados para gráfico em {ws.title}!{values_range}")
+
+        series_values = to_float_list(raw_values)
+        if len(series_values) != point_count:
+            raise ValueError(
+                f"Quantidade de labels em {xlabels_range} difere de {values_range}: "
+                f"{point_count} != {len(series_values)}"
+            )
+        series_names.append(series_name)
+        series_columns.append(series_values)
+
+    values = np.column_stack(series_columns)
+    return xlabels, series_names, values
+
+
 def _plot_stacked_expenses(
     *,
     xlabels: list[str],
@@ -154,7 +225,7 @@ def _plot_stacked_expenses(
         ax.text(
             x_leg + 0.12,
             float(y_ref),
-            str(name),
+            _wrap_words(str(name), max_line_len=16),
             ha="left",
             va="center",
             fontsize=9.0,
@@ -268,41 +339,57 @@ def generate_slide11_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     wb = load_workbook(filename=xlsx_path, data_only=True)
-    sheet_name = "slide_11"
-    if sheet_name not in wb.sheetnames:
-        raise ValueError(f"Aba não encontrada: {sheet_name!r}. Disponíveis: {wb.sheetnames}")
-    ws = wb[sheet_name]
+    expenses_sheet_name = "Tabelas"
+    index_sheet_name = "slide_11"
+    if expenses_sheet_name not in wb.sheetnames:
+        raise ValueError(f"Aba não encontrada: {expenses_sheet_name!r}. Disponíveis: {wb.sheetnames}")
+    if index_sheet_name not in wb.sheetnames:
+        raise ValueError(f"Aba não encontrada: {index_sheet_name!r}. Disponíveis: {wb.sheetnames}")
+    ws_expenses = wb[expenses_sheet_name]
+    ws_index = wb[index_sheet_name]
 
-    labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws, "C3:G3")]
-    series = [("" if v is None else str(v)).strip() for v in _read_range_row(ws, "B4:B6")]
+    tri_labels, series, tri_values = _read_named_series_rows(
+        ws_expenses,
+        xlabels_range="D33:F33",
+        series_specs=[
+            ("Pessoal", "D35:F35"),
+            ("Administrativas", "D39:F39"),
+            ("Depreciação e Amortização", "D45:F45"),
+        ],
+    )
 
-    row1 = to_float_list(_read_range_row(ws, "C4:G4"))
-    row2 = to_float_list(_read_range_row(ws, "C5:G5"))
-    row3 = to_float_list(_read_range_row(ws, "C6:G6"))
-    vals = np.column_stack((np.asarray(row1, dtype=float), np.asarray(row2, dtype=float), np.asarray(row3, dtype=float)))
+    nm_labels, _, nm_values = _read_named_series_rows(
+        ws_expenses,
+        xlabels_range="G33:H33",
+        series_specs=[
+            ("Pessoal", "G35:H35"),
+            ("Administrativas", "G39:H39"),
+            ("Depreciação e Amortização", "G45:H45"),
+        ],
+    )
 
     generated: list[Path] = []
 
     out22 = output_dir / "22_despesas_pessoal_adm_trimestres.png"
     _plot_stacked_expenses(
-        xlabels=labels[:3],
+        xlabels=tri_labels,
         series_names=series,
-        values=vals[:3, :],
+        values=tri_values,
         output_path=out22,
     )
     generated.append(out22)
 
     out23 = output_dir / "23_despesas_pessoal_adm_9m.png"
     _plot_stacked_expenses(
-        xlabels=labels[3:],
+        xlabels=nm_labels,
         series_names=series,
-        values=vals[3:, :],
+        values=nm_values,
         output_path=out23,
     )
     generated.append(out23)
 
-    idx_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws, "K3:O3")]
-    idx_values = to_float_list(_read_range_row(ws, "K4:O4"))
+    idx_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_index, "K3:O3")]
+    idx_values = to_float_list(_read_range_row(ws_index, "K4:O4"))
     out24 = output_dir / "24_indice_eficiencia.png"
     _plot_efficiency_index(
         xlabels=idx_labels,

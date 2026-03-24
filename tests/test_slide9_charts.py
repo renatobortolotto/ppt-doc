@@ -141,8 +141,9 @@ class TestSlide9Charts(unittest.TestCase):
             "G10:H10",
         )
         self.assertTrue(captured_lines["09_custo_variacao_custo_credito_9m.png"]["kwargs"]["fmt_as_percent"])
-        self.assertEqual(captured_lines["09_custo_variacao_custo_credito_9m.png"]["kwargs"]["label_fontsize"], 28.0)
-        self.assertEqual(captured_lines["09_custo_variacao_custo_credito_9m.png"]["kwargs"]["marker_size"], 160.0)
+        self.assertEqual(captured_lines["09_custo_variacao_custo_credito_9m.png"]["kwargs"]["label_fontsize"], 32.0)
+        self.assertEqual(captured_lines["09_custo_variacao_custo_credito_9m.png"]["kwargs"]["marker_size"], 220.0)
+        self.assertEqual(captured_lines["09_custo_variacao_custo_credito_9m.png"]["kwargs"]["x_margin"], 0.55)
 
 
 if __name__ == "__main__":

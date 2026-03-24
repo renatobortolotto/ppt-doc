@@ -475,6 +475,7 @@ def plot_line_from_excel(
     line_width: float = 2.2,
     label_fontsize: float = 9.0,
     marker_size: float = 26.0,
+    x_margin: float = 0.03,
 ) -> Tuple[plt.Figure, plt.Axes]:
     file_path = Path(file_path)
     if not file_path.exists():
@@ -579,7 +580,7 @@ def plot_line_from_excel(
     ax.set_title("")
     ax.set_xlabel("")
     ax.set_ylabel("")
-    ax.margins(x=0.03, y=0.08)
+    ax.margins(x=float(x_margin), y=0.08)
 
     fig.tight_layout(pad=0.2)
 

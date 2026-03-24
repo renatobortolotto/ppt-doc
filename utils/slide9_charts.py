@@ -432,9 +432,10 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         fmt_as_percent=True,
         smooth=True,
         line_width=6.0,
-        label_fontsize=28.0,
-        marker_size=160.0,
+        label_fontsize=32.0,
+        marker_size=220.0,
         label_offset_pts=20.0,
+        x_margin=0.55,
     )
     close_figure(fig)
     generated.append(output_dir / "09_custo_variacao_custo_credito_9m.png")

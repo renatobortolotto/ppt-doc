@@ -93,6 +93,12 @@ def _read_named_series_rows(
     return xlabels, series_names, values
 
 
+def _normalize_expense_values(values: np.ndarray) -> np.ndarray:
+    """Despesas podem vir negativas no Excel contábil; o gráfico usa magnitude."""
+
+    return np.abs(np.asarray(values, dtype=float))
+
+
 def _plot_stacked_expenses(
     *,
     xlabels: list[str],
@@ -366,6 +372,7 @@ def generate_slide11_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
             ("Depreciação e Amortização", "D45:F45"),
         ],
     )
+    tri_values = _normalize_expense_values(tri_values)
 
     nm_labels, _, nm_values = _read_named_series_rows(
         ws_expenses,
@@ -376,6 +383,7 @@ def generate_slide11_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
             ("Depreciação e Amortização", "G45:H45"),
         ],
     )
+    nm_values = _normalize_expense_values(nm_values)
 
     generated: list[Path] = []
 

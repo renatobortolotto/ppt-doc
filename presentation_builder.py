@@ -236,9 +236,11 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             label="slide 9",
             generator=generate_slide9_charts,
             output_files=(
-                "19_custo_credito_trimestres.png",
-                "20_custo_credito_9m.png",
-                "21_indice_cobertura.png",
+                "09_custo_credito_trimestres.png",
+                "09_custo_credito_9m.png",
+                "09_indice_cobertura.png",
+                "09_custo_variacao_custo_credito.png",
+                "09_custo_variacao_custo_credito_9m.png",
             ),
         ),
         ChartGeneratorSpec(

@@ -6,7 +6,7 @@ import numpy as np
 from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
-from utils.charts_common import close_figure, to_float_list
+from utils.charts_common import close_figure, plot_line_from_excel, to_float_list
 
 
 def _read_range_row(ws, cell_range: str) -> list[object]:
@@ -20,6 +20,42 @@ def _read_range_row(ws, cell_range: str) -> list[object]:
 
 def _fmt_int(v: float) -> str:
     return f"{float(v):,.0f}".replace(",", ".")
+
+
+def _as_negative(values: list[float]) -> list[float]:
+    return [-abs(float(value)) for value in values]
+
+
+def _wrap_words(text: str, *, max_line_len: int = 15) -> str:
+    s = (text or "").strip()
+    if not s:
+        return ""
+
+    words = s.split()
+    lines: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for word in words:
+        word_len = len(word)
+        if not current:
+            current = [word]
+            current_len = word_len
+            continue
+
+        if current_len + 1 + word_len <= max_line_len:
+            current.append(word)
+            current_len += 1 + word_len
+            continue
+
+        lines.append(" ".join(current))
+        current = [word]
+        current_len = word_len
+
+    if current:
+        lines.append(" ".join(current))
+
+    return "\n".join(lines)
 
 
 def _plot_stacked_bars_with_total(
@@ -185,7 +221,7 @@ def _plot_stacked_bars_with_total(
     ax.axhline(0.0, color="#2f2f2f", linewidth=1.2, zorder=1)
 
     # Legenda inline: marcador de cor + texto ao lado da cor correspondente.
-    x_leg = float(x.min()) - 0.95
+    x_leg = float(x.min()) - 1.28
     for j, name in enumerate(series_names):
         y_ref = segment_centers[j][-1] if segment_centers[j] else float("nan")
         if not np.isfinite(y_ref):
@@ -197,9 +233,9 @@ def _plot_stacked_bars_with_total(
             continue
         ax.scatter([x_leg], [float(y_ref)], s=90.0, marker="s", color=colors[j % len(colors)], edgecolors="none", zorder=6)
         ax.text(
-            x_leg + 0.12,
+            x_leg + 0.16,
             float(y_ref),
-            str(name),
+            _wrap_words(str(name), max_line_len=15),
             ha="left",
             va="center",
             fontsize=9.0,
@@ -208,7 +244,7 @@ def _plot_stacked_bars_with_total(
             clip_on=False,
         )
 
-    ax.set_xlim(float(x.min()) - 1.25, float(x.max()) + 0.65)
+    ax.set_xlim(float(x.min()) - 1.75, float(x.max()) + 0.65)
     ax.set_xticks(x)
     ax.set_xticklabels(xlabels, fontsize=10.0)
     ax.tick_params(axis="x", bottom=False, pad=8)
@@ -230,6 +266,7 @@ def _plot_indice_cobertura_percent(
     xlabels: list[str],
     values: list[float],
     output_path: Path,
+    highlight_last_count: int = 3,
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.patches import FancyBboxPatch
@@ -250,9 +287,9 @@ def _plot_indice_cobertura_percent(
 
     bars = ax.bar(x, vals_pct, width=0.62, color=colors, edgecolor="none", zorder=2)
 
-    # Highlight last 3 bars with rounded rectangle.
-    if len(vals_pct) >= 3:
-        i0 = len(vals_pct) - 3
+    # Highlight the rightmost bars with a rounded rectangle.
+    if highlight_last_count > 0 and len(vals_pct) >= highlight_last_count:
+        i0 = len(vals_pct) - highlight_last_count
         i1 = len(vals_pct) - 1
         x_left = float(x[i0] - 0.62 / 2.0 - 0.18)
         x_right = float(x[i1] + 0.62 / 2.0 + 0.18)
@@ -307,27 +344,26 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     wb = load_workbook(filename=xlsx_path, data_only=True)
-    sheet_name = "slide_9"
-    if sheet_name not in wb.sheetnames:
-        raise ValueError(f"Aba não encontrada: {sheet_name!r}. Disponíveis: {wb.sheetnames}")
-    ws = wb[sheet_name]
+    custo_sheet_name = "Tabelas"
+    cobertura_sheet_name = "Qualidade Cart 4966"
+    if custo_sheet_name not in wb.sheetnames:
+        raise ValueError(f"Aba não encontrada: {custo_sheet_name!r}. Disponíveis: {wb.sheetnames}")
+    if cobertura_sheet_name not in wb.sheetnames:
+        raise ValueError(f"Aba não encontrada: {cobertura_sheet_name!r}. Disponíveis: {wb.sheetnames}")
+    ws_custo = wb[custo_sheet_name]
+    ws_cobertura = wb[cobertura_sheet_name]
 
-    labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws, "C3:G3")]
-    pdd = to_float_list(_read_range_row(ws, "C6:G6"))
-    rec = to_float_list(_read_range_row(ws, "C7:G7"))
-
-    if len(labels) != 5 or len(pdd) != 5 or len(rec) != 5:
-        raise ValueError("Esperado bloco de 5 períodos em slide_9!C3:G7")
-
-    series_names = ["PDD Expandida", "Rec. de Crédito"]
+    series_names = ["PDD Expandida", "Recuperação de Crédito"]
     palette = ["#0B2E6B", "#5B8FF9"]
 
     generated: list[Path] = []
 
-    # 19) Custo de crédito - Trimestres (3T24, 2T25, 3T25)
-    tri_labels = labels[:3]
-    tri_values = np.column_stack((np.asarray(pdd[:3], dtype=float), np.asarray(rec[:3], dtype=float)))
-    out19 = output_dir / "19_custo_credito_trimestres.png"
+    # 09) Custo de crédito - Trimestres
+    tri_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_custo, "G2:H2")]
+    tri_pdd = to_float_list(_read_range_row(ws_custo, "G13:H13"))
+    tri_rec = _as_negative(to_float_list(_read_range_row(ws_custo, "G5:H5")))
+    tri_values = np.column_stack((np.asarray(tri_pdd, dtype=float), np.asarray(tri_rec, dtype=float)))
+    out19 = output_dir / "09_custo_credito_trimestres.png"
     _plot_stacked_bars_with_total(
         xlabels=tri_labels,
         series_names=series_names,
@@ -337,10 +373,12 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     )
     generated.append(out19)
 
-    # 20) Custo de crédito - 9M (9M24, 9M25)
-    ytd_labels = labels[3:]
-    ytd_values = np.column_stack((np.asarray(pdd[3:], dtype=float), np.asarray(rec[3:], dtype=float)))
-    out20 = output_dir / "20_custo_credito_9m.png"
+    # 09) Custo de crédito - 9M
+    ytd_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_custo, "D2:F2")]
+    ytd_pdd = to_float_list(_read_range_row(ws_custo, "D13:F13"))
+    ytd_rec = _as_negative(to_float_list(_read_range_row(ws_custo, "D5:F5")))
+    ytd_values = np.column_stack((np.asarray(ytd_pdd, dtype=float), np.asarray(ytd_rec, dtype=float)))
+    out20 = output_dir / "09_custo_credito_9m.png"
     _plot_stacked_bars_with_total(
         xlabels=ytd_labels,
         series_names=series_names,
@@ -350,15 +388,48 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     )
     generated.append(out20)
 
-    # 21) Índice de cobertura (K3:O4), sem brackets e exibindo percentual.
-    cov_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws, "K3:O3")]
-    cov_values = to_float_list(_read_range_row(ws, "K4:O4"))
+    # 09) Índice de cobertura
+    cov_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_cobertura, "D2:F2")]
+    cov_values = to_float_list(_read_range_row(ws_cobertura, "D17:F17"))
     _plot_indice_cobertura_percent(
         xlabels=cov_labels,
         values=cov_values,
-        output_path=output_dir / "21_indice_cobertura.png",
+        output_path=output_dir / "09_indice_cobertura.png",
+        highlight_last_count=2,
     )
-    generated.append(output_dir / "21_indice_cobertura.png")
+    generated.append(output_dir / "09_indice_cobertura.png")
+
+    # 09) Variação do custo de crédito - Trimestres
+    fig, _ax = plot_line_from_excel(
+        file_path=xlsx_path,
+        sheet_name=custo_sheet_name,
+        values_range="D10:F10",
+        xlabels_range="D2:F2",
+        output_path=output_dir / "09_custo_variacao_custo_credito.png",
+        fmt_as_percent=True,
+        y_baseline=0.0,
+        y_expand=0.10,
+        smooth=True,
+    )
+    close_figure(fig)
+    generated.append(output_dir / "09_custo_variacao_custo_credito.png")
+
+    # 09) Variação do custo de crédito - 9M
+    fig, _ax = plot_line_from_excel(
+        file_path=xlsx_path,
+        sheet_name=custo_sheet_name,
+        values_range="G10:H10",
+        xlabels_range="G2:H2",
+        output_path=output_dir / "09_custo_variacao_custo_credito_9m.png",
+        fmt_as_percent=True,
+        smooth=True,
+        line_width=5.0,
+        label_fontsize=24.0,
+        marker_size=96.0,
+        label_offset_pts=18.0,
+    )
+    close_figure(fig)
+    generated.append(output_dir / "09_custo_variacao_custo_credito_9m.png")
 
     return generated
 

@@ -85,33 +85,33 @@ class TestSlide11Charts(unittest.TestCase):
 
         self.assertEqual(len(files), 3)
         self.assertEqual(
-            captured["22_despesas_pessoal_adm_trimestres.png"]["xlabels"],
+            captured["11_despesas_pessoal_adm_trimestres.png"]["xlabels"],
             ["1T25", "2T25", "3T25"],
         )
         self.assertEqual(
-            captured["22_despesas_pessoal_adm_trimestres.png"]["series_names"],
+            captured["11_despesas_pessoal_adm_trimestres.png"]["series_names"],
             ["Pessoal", "Administrativas", "Depreciação e Amortização"],
         )
         self.assertEqual(
-            captured["22_despesas_pessoal_adm_trimestres.png"]["values"],
+            captured["11_despesas_pessoal_adm_trimestres.png"]["values"],
             [[100.0, 40.0, 10.0], [110.0, 42.0, 11.0], [120.0, 44.0, 12.0]],
         )
 
         self.assertEqual(
-            captured["23_despesas_pessoal_adm_9m.png"]["xlabels"],
+            captured["11_despesas_pessoal_adm_9m.png"]["xlabels"],
             ["9M24", "9M25"],
         )
         self.assertEqual(
-            captured["23_despesas_pessoal_adm_9m.png"]["values"],
+            captured["11_despesas_pessoal_adm_9m.png"]["values"],
             [[330.0, 126.0, 31.0], [360.0, 132.0, 33.0]],
         )
 
         self.assertEqual(
-            captured["24_indice_eficiencia.png"]["xlabels"],
+            captured["11_indice_eficiencia.png"]["xlabels"],
             ["1T25", "2T25", "3T25", "9M24", "9M25"],
         )
         self.assertEqual(
-            captured["24_indice_eficiencia.png"]["values"],
+            captured["11_indice_eficiencia.png"]["values"],
             [0.37, 0.38, 0.39, 0.40, 0.41],
         )
 

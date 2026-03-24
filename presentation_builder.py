@@ -248,9 +248,9 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             label="slide 11",
             generator=generate_slide11_charts,
             output_files=(
-                "22_despesas_pessoal_adm_trimestres.png",
-                "23_despesas_pessoal_adm_9m.png",
-                "24_indice_eficiencia.png",
+                "11_despesas_pessoal_adm_trimestres.png",
+                "11_despesas_pessoal_adm_9m.png",
+                "11_indice_eficiencia.png",
             ),
         ),
         ChartGeneratorSpec(

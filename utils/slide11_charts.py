@@ -370,7 +370,7 @@ def generate_slide11_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
 
     generated: list[Path] = []
 
-    out22 = output_dir / "22_despesas_pessoal_adm_trimestres.png"
+    out22 = output_dir / "11_despesas_pessoal_adm_trimestres.png"
     _plot_stacked_expenses(
         xlabels=tri_labels,
         series_names=series,
@@ -379,7 +379,7 @@ def generate_slide11_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
     )
     generated.append(out22)
 
-    out23 = output_dir / "23_despesas_pessoal_adm_9m.png"
+    out23 = output_dir / "11_despesas_pessoal_adm_9m.png"
     _plot_stacked_expenses(
         xlabels=nm_labels,
         series_names=series,
@@ -390,7 +390,7 @@ def generate_slide11_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
 
     idx_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_index, "K3:O3")]
     idx_values = to_float_list(_read_range_row(ws_index, "K4:O4"))
-    out24 = output_dir / "24_indice_eficiencia.png"
+    out24 = output_dir / "11_indice_eficiencia.png"
     _plot_efficiency_index(
         xlabels=idx_labels,
         values=idx_values,

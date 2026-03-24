@@ -26,6 +26,10 @@ def _as_negative(values: list[float]) -> list[float]:
     return [-abs(float(value)) for value in values]
 
 
+def _as_positive(values: list[float]) -> list[float]:
+    return [abs(float(value)) for value in values]
+
+
 def _wrap_words(text: str, *, max_line_len: int = 15) -> str:
     s = (text or "").strip()
     if not s:
@@ -360,7 +364,7 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
 
     # 09) Custo de crédito - Trimestres
     tri_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_custo, "G2:H2")]
-    tri_pdd = to_float_list(_read_range_row(ws_custo, "G13:H13"))
+    tri_pdd = _as_positive(to_float_list(_read_range_row(ws_custo, "G13:H13")))
     tri_rec = _as_negative(to_float_list(_read_range_row(ws_custo, "G5:H5")))
     tri_values = np.column_stack((np.asarray(tri_pdd, dtype=float), np.asarray(tri_rec, dtype=float)))
     out19 = output_dir / "09_custo_credito_trimestres.png"
@@ -375,7 +379,7 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
 
     # 09) Custo de crédito - 9M
     ytd_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_custo, "D2:F2")]
-    ytd_pdd = to_float_list(_read_range_row(ws_custo, "D13:F13"))
+    ytd_pdd = _as_positive(to_float_list(_read_range_row(ws_custo, "D13:F13")))
     ytd_rec = _as_negative(to_float_list(_read_range_row(ws_custo, "D5:F5")))
     ytd_values = np.column_stack((np.asarray(ytd_pdd, dtype=float), np.asarray(ytd_rec, dtype=float)))
     out20 = output_dir / "09_custo_credito_9m.png"
@@ -410,6 +414,10 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         y_baseline=0.0,
         y_expand=0.10,
         smooth=True,
+        line_width=6.0,
+        label_fontsize=28.0,
+        marker_size=160.0,
+        label_offset_pts=20.0,
     )
     close_figure(fig)
     generated.append(output_dir / "09_custo_variacao_custo_credito.png")
@@ -423,10 +431,10 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         output_path=output_dir / "09_custo_variacao_custo_credito_9m.png",
         fmt_as_percent=True,
         smooth=True,
-        line_width=5.0,
-        label_fontsize=24.0,
-        marker_size=96.0,
-        label_offset_pts=18.0,
+        line_width=6.0,
+        label_fontsize=28.0,
+        marker_size=160.0,
+        label_offset_pts=20.0,
     )
     close_figure(fig)
     generated.append(output_dir / "09_custo_variacao_custo_credito_9m.png")

@@ -23,14 +23,14 @@ class TestSlide9Charts(unittest.TestCase):
 
         for col_offset, label in enumerate(["9M23", "9M24", "9M25"], start=4):
             ws_custo.cell(row=2, column=col_offset).value = label
-        for col_offset, value in enumerate([100, 110, 120], start=4):
+        for col_offset, value in enumerate([100, -110, 120], start=4):
             ws_custo.cell(row=13, column=col_offset).value = value
         for col_offset, value in enumerate([10, 12, 14], start=4):
             ws_custo.cell(row=5, column=col_offset).value = value
 
         for col_offset, label in enumerate(["4T24", "1T25"], start=7):
             ws_custo.cell(row=2, column=col_offset).value = label
-        for col_offset, value in enumerate([40, 45], start=7):
+        for col_offset, value in enumerate([-40, 45], start=7):
             ws_custo.cell(row=13, column=col_offset).value = value
         for col_offset, value in enumerate([4, 5], start=7):
             ws_custo.cell(row=5, column=col_offset).value = value
@@ -125,6 +125,8 @@ class TestSlide9Charts(unittest.TestCase):
             "D10:F10",
         )
         self.assertTrue(captured_lines["09_custo_variacao_custo_credito.png"]["kwargs"]["fmt_as_percent"])
+        self.assertEqual(captured_lines["09_custo_variacao_custo_credito.png"]["kwargs"]["label_fontsize"], 28.0)
+        self.assertEqual(captured_lines["09_custo_variacao_custo_credito.png"]["kwargs"]["marker_size"], 160.0)
 
         self.assertEqual(
             captured_lines["09_custo_variacao_custo_credito_9m.png"]["sheet_name"],
@@ -139,6 +141,8 @@ class TestSlide9Charts(unittest.TestCase):
             "G10:H10",
         )
         self.assertTrue(captured_lines["09_custo_variacao_custo_credito_9m.png"]["kwargs"]["fmt_as_percent"])
+        self.assertEqual(captured_lines["09_custo_variacao_custo_credito_9m.png"]["kwargs"]["label_fontsize"], 28.0)
+        self.assertEqual(captured_lines["09_custo_variacao_custo_credito_9m.png"]["kwargs"]["marker_size"], 160.0)
 
 
 if __name__ == "__main__":

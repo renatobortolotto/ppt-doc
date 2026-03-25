@@ -120,11 +120,11 @@ def _plot_stacked_expenses(
     ax.set_facecolor("none")
 
     if n <= 2:
-        bar_slot = 0.36
-        width = 0.18
+        bar_slot = 0.19
+        width = 0.15
     else:
-        bar_slot = 0.40
-        width = 0.22
+        bar_slot = 0.22
+        width = 0.18
     x = np.arange(n, dtype=float) * bar_slot
     bottom = np.zeros(n, dtype=float)
     segment_centers: list[list[float]] = [[] for _ in range(m)]

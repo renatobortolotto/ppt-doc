@@ -119,8 +119,13 @@ def _plot_stacked_expenses(
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    x = np.arange(n, dtype=float)
-    width = 0.62
+    if n <= 2:
+        bar_slot = 0.36
+        width = 0.18
+    else:
+        bar_slot = 0.40
+        width = 0.22
+    x = np.arange(n, dtype=float) * bar_slot
     bottom = np.zeros(n, dtype=float)
     segment_centers: list[list[float]] = [[] for _ in range(m)]
 
@@ -225,10 +230,10 @@ def _plot_stacked_expenses(
             ymin, ymax = ax.get_ylim()
             ax.set_ylim(ymin, max(ymax, max_text_y + offset_y * 1.4))
 
-    # Legenda inline à esquerda.
-    x_leg = float(x.min()) - 0.95
+    # Rótulos ao lado esquerdo da primeira barra, alinhados à cor correspondente.
+    x_leg = float(x[0]) - width / 2.0 - (0.04 if n <= 2 else 0.05)
     for j, name in enumerate(series_names):
-        y_ref = segment_centers[j][-1] if segment_centers[j] else float("nan")
+        y_ref = segment_centers[j][0] if segment_centers[j] else float("nan")
         if not np.isfinite(y_ref):
             for yc in segment_centers[j]:
                 if np.isfinite(yc):
@@ -236,12 +241,11 @@ def _plot_stacked_expenses(
                     break
         if not np.isfinite(y_ref):
             continue
-        ax.scatter([x_leg], [float(y_ref)], s=90.0, marker="s", color=colors[j % len(colors)], edgecolors="none", zorder=6)
         ax.text(
-            x_leg + 0.12,
+            x_leg,
             float(y_ref),
             _wrap_words(str(name), max_line_len=16),
-            ha="left",
+            ha="right",
             va="center",
             fontsize=9.0,
             color="#2f2f2f",
@@ -249,7 +253,10 @@ def _plot_stacked_expenses(
             clip_on=False,
         )
 
-    ax.set_xlim(float(x.min()) - 1.25, float(x.max()) + 0.65)
+    ax.set_xlim(
+        float(x.min()) - (0.58 if n <= 2 else 0.62),
+        float(x.max()) + (0.38 if n <= 2 else 0.30),
+    )
     ax.set_xticks(x)
     ax.set_xticklabels(xlabels, fontsize=10.0)
     ax.tick_params(axis="x", bottom=False, pad=8)

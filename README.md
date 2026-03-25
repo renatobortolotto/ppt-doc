@@ -18,6 +18,7 @@ e devolve o `.pptx` final.
 - `config/job_config.json`: template, saida, diretorio de imagens e JSON padrao da LLM
 - `config/text_fields.json`: mapeamento `TOKEN -> celula A1` e chaves que devem vir do JSON da LLM
 - `utils/`: geradores de graficos e extracao de campos do Excel
+- `CHART_STYLE_GUIDE.md`: guia curto com estilizações aprovadas para reutilizar em ajustes visuais
 
 Nos campos de texto vindos do Excel, voce tambem pode usar `div` para dividir o valor antes de converter para string, `round` para definir quantas casas decimais o texto deve ter, `is_porc` para preservar a exibicao percentual do Excel (por exemplo `9,9%` em vez de `0.099`) e `is_pp` para forcar a leitura numerica pura de celulas com formato customizado em `p.p.`, deixando `round` e `VAR_` funcionarem em cima do valor bruto. Exemplo:
 

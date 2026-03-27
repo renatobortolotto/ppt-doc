@@ -122,15 +122,13 @@ def _plot_slide12_stacked(
             clip_on=False,
         )
 
-    # Mostrar rótulos para todos os segmentos.
-    # Top 2: valor + participação no total. Demais: valor com fonte proporcional.
+    # Mostrar rótulos para todos os segmentos com valor + participação no total.
     for i in range(n):
         total = float(totals[i])
         if not np.isfinite(total) or abs(total) < 1e-12:
             continue
 
         col = values[i, :]
-        top2_idx = set(np.argsort(col)[-2:].tolist())  # dois maiores
         for j in range(m):
             v = float(col[j])
             if not np.isfinite(v) or v <= 0:
@@ -139,18 +137,10 @@ def _plot_slide12_stacked(
             yc = float(segment_bottoms[i, j]) + v / 2.0
             rgba = to_rgba(colors[j % len(colors)])
             txt_color = _text_color_for_bg_rgba(rgba)
-            is_top2 = j in top2_idx
-            if is_top2:
-                label = f"{_fmt_num(v, decimals=1)} ({_fmt_share(share, decimals=0)})"
-                fontsize = 8.6
-                fw = "bold"
-                y_adj = 0.0
-            else:
-                # Segments menores também exibem valor; fonte acompanha a relevância.
-                label = _fmt_num(v, decimals=1)
-                fontsize = float(np.clip(6.6 + share * 0.05, 6.6, 8.0))
-                fw = "normal"
-                y_adj = 0.0
+            label = f"{_fmt_num(v, decimals=1)} ({_fmt_share(share, decimals=0)})"
+            fontsize = 8.6 if share >= 20.0 else 7.8
+            fw = "bold" if share >= 20.0 else "normal"
+            y_adj = 0.0
             ax.text(
                 float(x[i]),
                 yc + y_adj,
@@ -207,55 +197,28 @@ def _plot_slide12_stacked(
         ymin, ymax = ax.get_ylim()
         ax.set_ylim(ymin, max(ymax, max_text_y + offset_y * 1.3))
 
-    # Rótulos de séries ao lado esquerdo do gráfico (sem caixas), com linhas-guia.
-    # Base: posiciona pelos centros dos segmentos da primeira barra.
+    # Rótulos de séries no mesmo estilo do slide 11:
+    # texto simples à esquerda da primeira barra, alinhado ao centro da faixa.
     i_ref = 0
-    centers: list[tuple[int, float]] = []
     for j in range(m):
         v = float(values[i_ref, j])
         if not np.isfinite(v) or abs(v) < 1e-12:
             continue
         yc = float(segment_bottoms[i_ref, j]) + v / 2.0
-        centers.append((j, yc))
+        x_text = float(x[i_ref]) - width / 2.0 - 0.06
+        ax.text(
+            x_text,
+            yc,
+            str(series_names[j]),
+            ha="right",
+            va="center",
+            fontsize=8.1,
+            color="#2f2f2f",
+            zorder=7,
+            clip_on=False,
+        )
 
-    centers.sort(key=lambda t: t[1])
-    if centers:
-        y_min = centers[0][1]
-        y_max = centers[-1][1]
-        span = max(0.8, (y_max - y_min))
-        min_sep = max(0.35, span / 18.0)
-
-        adjusted: list[tuple[int, float, float]] = []  # (series_idx, y_src, y_lbl)
-        last_y = -1e18
-        for j, y_src in centers:
-            y_lbl = max(y_src, last_y + min_sep)
-            adjusted.append((j, y_src, y_lbl))
-            last_y = y_lbl
-
-        x_anchor = float(x[i_ref]) - width / 2.0
-        x_text = x_anchor - 0.58
-
-        for j, y_src, y_lbl in adjusted:
-            ax.plot(
-                [x_anchor - 0.03, x_text + 0.06],
-                [y_src, y_lbl],
-                color="#7a7a7a",
-                linewidth=0.9,
-                zorder=6,
-            )
-            ax.text(
-                x_text,
-                y_lbl,
-                str(series_names[j]),
-                ha="right",
-                va="center",
-                fontsize=8.1,
-                color="#2f2f2f",
-                zorder=7,
-                clip_on=False,
-            )
-
-    ax.set_xlim(float(x.min()) - 1.45, float(x.max()) + 0.65)
+    ax.set_xlim(float(x.min()) - 1.20, float(x.max()) + 0.65)
     ax.set_xticks(x)
     ax.set_xticklabels(xlabels, fontsize=10.0)
     ax.tick_params(axis="x", bottom=False, pad=8)
@@ -272,26 +235,29 @@ def _plot_slide12_stacked(
 
 
 def generate_slide12_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
-    """Slide 12: gráfico empilhado (B3:E11) com top2 de participação, totais e brackets."""
+    """Slide 12: gráfico empilhado com base na aba Carteira."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     wb = load_workbook(filename=xlsx_path, data_only=True)
-    sheet_name = "slide_12"
+    sheet_name = "Carteira"
     if sheet_name not in wb.sheetnames:
         raise ValueError(f"Aba não encontrada: {sheet_name!r}. Disponíveis: {wb.sheetnames}")
     ws = wb[sheet_name]
 
-    xlabels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws, "C3:E3")]
-    series_names = [("" if v is None else str(v)).strip() for v in _read_range_col(ws, "B4:B11")]
+    xlabels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws, "D12:F12")]
+    series_names = [
+        ("" if ws["C15"].value is None else str(ws["C15"].value)).strip(),
+        ("" if ws["C22"].value is None else str(ws["C22"].value)).strip(),
+        ("" if ws["C34"].value is None else str(ws["C34"].value)).strip(),
+    ]
 
     raw_rows: list[list[float]] = []
-    for r in range(4, 12):
-        raw_rows.append(to_float_list(_read_range_row(ws, f"C{r}:E{r}")))
-    # raw_rows: [n_series, n_bars] -> transpose to [n_bars, n_series]
-    values = np.asarray(raw_rows, dtype=float).T
+    for values_range in ("D15:F15", "D22:F22", "D34:F34"):
+        raw_rows.append(to_float_list(_read_range_row(ws, values_range)))
+    values = np.asarray(raw_rows, dtype=float).T / 1000.0
 
-    out25 = output_dir / "25_slide12_composicao.png"
+    out25 = output_dir / "12_slide12_composicao.png"
     _plot_slide12_stacked(
         xlabels=xlabels,
         series_names=series_names,

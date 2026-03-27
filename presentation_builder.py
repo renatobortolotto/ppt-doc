@@ -257,7 +257,7 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             key="slide12",
             label="slide 12",
             generator=generate_slide12_charts,
-            output_files=("25_slide12_composicao.png",),
+            output_files=("12_slide12_composicao.png",),
         ),
         ChartGeneratorSpec(
             key="slide13",

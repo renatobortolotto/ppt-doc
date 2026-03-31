@@ -264,10 +264,9 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             label="slide 13",
             generator=generate_slide13_charts,
             output_files=(
-                "26_originacao_veiculos_trimestres.png",
-                "27_originacao_veiculos_9m.png",
-                "28_medias_trimestres.png",
-                "29_medias_9m.png",
+                "13_varejo_produtos_entrada.png",
+                "13_varejo_relacional.png",
+                "13_atacado.png",
             ),
         ),
         ChartGeneratorSpec(

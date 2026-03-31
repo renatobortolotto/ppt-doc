@@ -30,11 +30,21 @@ class TestSlide12Charts(unittest.TestCase):
 
         captured: dict[str, object] = {}
 
-        def _capture_plot(*, xlabels, series_names, values, output_path):
+        def _capture_plot(
+            *,
+            xlabels,
+            series_names,
+            values,
+            output_path,
+            bracket_top_gap_scale=0.20,
+            bracket_top_gap_min=1.4,
+        ):
             captured["xlabels"] = list(xlabels)
             captured["series_names"] = list(series_names)
             captured["values"] = values.tolist()
             captured["output_name"] = Path(output_path).name
+            captured["bracket_top_gap_scale"] = bracket_top_gap_scale
+            captured["bracket_top_gap_min"] = bracket_top_gap_min
 
         with tempfile.TemporaryDirectory() as td:
             xlsx_path = Path(td) / "test.xlsx"
@@ -59,6 +69,8 @@ class TestSlide12Charts(unittest.TestCase):
                 [0.012, 0.022, 0.032],
             ],
         )
+        self.assertEqual(captured["bracket_top_gap_scale"], 0.12)
+        self.assertEqual(captured["bracket_top_gap_min"], 0.9)
 
 
 if __name__ == "__main__":

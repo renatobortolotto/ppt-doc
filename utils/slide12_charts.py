@@ -47,6 +47,8 @@ def _plot_slide12_stacked(
     series_names: list[str],
     values: np.ndarray,  # [n_bars, n_series]
     output_path: Path,
+    bracket_top_gap_scale: float = 0.20,
+    bracket_top_gap_min: float = 1.4,
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import to_rgba
@@ -158,7 +160,10 @@ def _plot_slide12_stacked(
     offset_y = max(abs_max * 0.10, 0.8)
     bracket_h = max(abs_max * 0.03, 0.6)
     top_labels_max = max(total_label_tops) if total_label_tops else float(np.nanmax(totals))
-    top_base = float(top_labels_max) + max(abs_max * 0.20, 1.4)
+    top_base = float(top_labels_max) + max(
+        abs_max * float(bracket_top_gap_scale),
+        float(bracket_top_gap_min),
+    )
     max_text_y: float | None = None
 
     for i in range(1, n):
@@ -263,6 +268,8 @@ def generate_slide12_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         series_names=series_names,
         values=values,
         output_path=out25,
+        bracket_top_gap_scale=0.12,
+        bracket_top_gap_min=0.9,
     )
     return [out25]
 

@@ -128,6 +128,26 @@ def _share_label_indices(values_row: np.ndarray) -> set[int]:
     return set(ordered_positive[:top_n])
 
 
+def _top_badge_label_indices(values_row: np.ndarray) -> set[int]:
+    row = np.asarray(values_row, dtype=float)
+    ordered_positive = [
+        idx for idx in _stack_order_for_bar(row) if np.isfinite(float(row[idx])) and float(row[idx]) > 0
+    ]
+    if not ordered_positive:
+        return set()
+
+    total = float(np.nansum(row))
+    if not np.isfinite(total) or total <= 0:
+        return set()
+
+    candidates = ordered_positive[-2:]
+    return {
+        idx
+        for idx in candidates
+        if ((float(row[idx]) / total) * 100.0) <= 12.0
+    }
+
+
 def _sum_ranges(ws, ranges: tuple[str, ...]) -> np.ndarray:
     total: np.ndarray | None = None
     for cell_range in ranges:
@@ -221,6 +241,7 @@ def _plot_slide13_breakdown(
             continue
 
         pct_indices = _share_label_indices(values_arr[i, :])
+        badge_indices = _top_badge_label_indices(values_arr[i, :])
         for idx in orders[i]:
             value = float(values_arr[i, idx])
             if not np.isfinite(value) or value <= 0:
@@ -232,6 +253,7 @@ def _plot_slide13_breakdown(
 
             rgba = to_rgba(palette[idx % len(palette)])
             txt_color = _text_color_for_bg_rgba(rgba)
+            use_badge = idx in badge_indices
             ax.text(
                 float(x[i]),
                 float(segment_centers[i, idx]),
@@ -241,14 +263,24 @@ def _plot_slide13_breakdown(
                 fontsize=8.6 if idx in pct_indices else 7.8,
                 color=txt_color,
                 fontweight="bold" if idx in pct_indices else "normal",
-                zorder=6,
+                zorder=7 if use_badge else 6,
+                clip_on=not use_badge,
+                bbox=(
+                    {
+                        "facecolor": palette[idx % len(palette)],
+                        "edgecolor": "none",
+                        "boxstyle": "round,pad=0.16",
+                    }
+                    if use_badge
+                    else None
+                ),
             )
 
     if n >= 2:
-        offset_y = max(abs_max * 0.08, 0.30)
-        bracket_h = max(abs_max * 0.03, 0.18)
+        offset_y = max(abs_max * 0.07, 0.24)
+        bracket_h = max(abs_max * 0.028, 0.15)
         top_labels_max = max(total_label_tops) if total_label_tops else float(np.nanmax(totals))
-        top_base = float(top_labels_max) + max(abs_max * 0.12, 0.55)
+        top_base = float(top_labels_max) + max(abs_max * 0.08, 0.32)
         max_text_y: float | None = None
 
         for i in range(1, n):

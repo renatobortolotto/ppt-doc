@@ -10,6 +10,7 @@ from utils.slide13_charts import (
     _fmt_num,
     _share_label_indices,
     _stack_order_for_bar,
+    _top_badge_label_indices,
     SLIDE13_ATACADO_PALETTE,
     SLIDE13_PALETTE,
     generate_slide13_charts,
@@ -25,6 +26,8 @@ class TestSlide13Charts(unittest.TestCase):
         self.assertEqual(_stack_order_for_bar(np.asarray([1.0, 3.0, 2.0])), (1, 2, 0))
         self.assertEqual(_share_label_indices(np.asarray([9.0, 8.0, 7.0, 6.0, 5.0])), {0, 1, 2})
         self.assertEqual(_share_label_indices(np.asarray([9.0, 8.0, 7.0])), {0, 1})
+        self.assertEqual(_top_badge_label_indices(np.asarray([9.0, 5.0, 1.0, 0.6])), {2, 3})
+        self.assertEqual(_top_badge_label_indices(np.asarray([9.0, 5.0, 3.0, 2.0])), {3})
 
     def test_generate_slide13_charts_uses_updated_carteira_ranges(self):
         wb = Workbook()

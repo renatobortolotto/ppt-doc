@@ -13,6 +13,8 @@ from utils.charts_common import close_figure, to_float_list
 
 STACKED_COLORS = ("#123A7A", "#5B8FF9")
 PERCENT_BAR_COLOR = "#123A7A"
+SLIDE14_FONT_SCALE = 1.5
+SLIDE14_PERCENT_FIGSIZE = (6.4, 2.6)
 
 
 @dataclass(frozen=True)
@@ -191,7 +193,7 @@ def _plot_stacked_veiculos(
                 label,
                 ha="center",
                 va="center",
-                fontsize=8.6,
+                fontsize=8.6 * SLIDE14_FONT_SCALE,
                 color=txt_color,
                 zorder=4,
             )
@@ -209,7 +211,7 @@ def _plot_stacked_veiculos(
             _fmt_value(total),
             ha="center",
             va="bottom",
-            fontsize=9.8,
+            fontsize=9.8 * SLIDE14_FONT_SCALE,
             fontweight="bold" if i == n - 1 else "normal",
             color="#2f2f2f",
             zorder=5,
@@ -250,7 +252,7 @@ def _plot_stacked_veiculos(
                 label,
                 ha="center",
                 va="bottom",
-                fontsize=8.9,
+                fontsize=8.9 * SLIDE14_FONT_SCALE,
                 color="#2f2f2f",
                 zorder=5,
             )
@@ -276,7 +278,7 @@ def _plot_stacked_veiculos(
             str(name),
             ha="right",
             va="center",
-            fontsize=8.6,
+            fontsize=8.6 * SLIDE14_FONT_SCALE,
             color="#2f2f2f",
             zorder=6,
             clip_on=False,
@@ -284,7 +286,7 @@ def _plot_stacked_veiculos(
 
     ax.set_xlim(float(x.min()) - 0.72, float(x.max()) + 0.28)
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * SLIDE14_FONT_SCALE)
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for spine in ("left", "right", "top", "bottom"):
@@ -310,7 +312,7 @@ def _plot_percent_bars(
     x = np.arange(len(vals), dtype=float) * (0.22 if len(vals) <= 2 else 0.24)
     width = 0.18 if len(vals) <= 2 else 0.20
 
-    fig, ax = plt.subplots(figsize=(6.4, 4.7), dpi=240)
+    fig, ax = plt.subplots(figsize=SLIDE14_PERCENT_FIGSIZE, dpi=240)
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
@@ -323,7 +325,7 @@ def _plot_percent_bars(
             _fmt_pct_trunc(v),
             ha="center",
             va="bottom",
-            fontsize=10.0,
+            fontsize=10.0 * SLIDE14_FONT_SCALE,
             fontweight="bold" if i == len(vals) - 1 else "normal",
             color="#2f2f2f",
             zorder=4,
@@ -334,7 +336,7 @@ def _plot_percent_bars(
     ax.set_ylim(0.0, ymax)
     ax.set_xlim(float(x.min()) - 0.30, float(x.max()) + 0.30)
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * SLIDE14_FONT_SCALE)
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for spine in ("left", "right", "top", "bottom"):

@@ -15,7 +15,7 @@ from utils.slide13_charts import generate_slide13_charts
 from utils.slide14_charts import generate_slide14_charts
 from utils.slide15_charts import generate_slide15_charts
 from utils.slide16_charts import generate_slide16_charts
-from utils.slide18_charts import generate_slide18_charts
+from utils.slide19_charts import generate_slide19_charts
 from utils.slide10_charts import generate_slide10_charts
 from utils.slide20_charts import generate_slide20_charts
 from utils.slide7_charts import generate_slide7_charts
@@ -23,6 +23,12 @@ from utils.slide3_charts import generate_slide3_charts
 from utils.slide8_charts import generate_slide8_charts
 from utils.slide9_charts import generate_slide9_charts
 from utils.slide4_charts import generate_slide4_charts
+
+try:
+    from utils.slide18_charts import generate_slide18_charts
+except ModuleNotFoundError:
+    def generate_slide18_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
+        raise ModuleNotFoundError("utils.slide18_charts não está disponível no workspace atual")
 from utils.xlsx_extract import _load_workbook as _load_validated_workbook
 from utils.xlsx_text_fields import (
     TextFieldExtractionResult,
@@ -301,6 +307,16 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
                 "33_veiculos_empilhado.png",
                 "34_premios_seguros_trimestres.png",
                 "35_premios_seguros_9m.png",
+            ),
+        ),
+        ChartGeneratorSpec(
+            key="slide19",
+            label="slide 19",
+            generator=generate_slide19_charts,
+            output_files=(
+                "19_veiculos_empilhado.png",
+                "19_seguros_cartoes_trimestres.png",
+                "19_seguros_cartoes_anos.png",
             ),
         ),
         ChartGeneratorSpec(

@@ -14,6 +14,7 @@ from utils.slide12_charts import generate_slide12_charts
 from utils.slide13_charts import generate_slide13_charts
 from utils.slide14_charts import generate_slide14_charts
 from utils.slide15_charts import generate_slide15_charts
+from utils.slide16_charts import generate_slide16_charts
 from utils.slide18_charts import generate_slide18_charts
 from utils.slide10_charts import generate_slide10_charts
 from utils.slide20_charts import generate_slide20_charts
@@ -285,6 +286,12 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             label="slide 15",
             generator=generate_slide15_charts,
             output_files=("15_captacoes_trimestres.png",),
+        ),
+        ChartGeneratorSpec(
+            key="slide16",
+            label="slide 16",
+            generator=generate_slide16_charts,
+            output_files=("16_indice_basileia_trimestres.png",),
         ),
         ChartGeneratorSpec(
             key="slide18",

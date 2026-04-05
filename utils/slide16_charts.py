@@ -63,6 +63,14 @@ def _text_color_for_bg_rgba(rgba) -> str:
     return "#ffffff" if lum < 0.50 else "#2f2f2f"
 
 
+def _format_side_label(name: str) -> str:
+    text = str(name).strip()
+    for prefix in ("Nível I ", "Nível II "):
+        if text.startswith(prefix):
+            return f"{prefix.strip()}\n{text[len(prefix):].strip()}"
+    return text
+
+
 def _resolve_basileia_sheet_name(wb) -> str:
     for candidate in SLIDE16_SHEET_CANDIDATES:
         if candidate in wb.sheetnames:
@@ -182,12 +190,19 @@ def _plot_stacked_basileia(
             ymin, ymax = ax.get_ylim()
             ax.set_ylim(ymin, max(ymax, text_y + offset_y * 0.9))
 
-    max_name_len = max((len(str(name).strip()) for name in series_names), default=1)
+    display_names = [_format_side_label(name) for name in series_names]
+    max_name_len = max(
+        (
+            max((len(line.strip()) for line in display_name.splitlines()), default=0)
+            for display_name in display_names
+        ),
+        default=1,
+    )
     left_margin = max(1.8, 0.85 + max_name_len * 0.043)
     x_text = float(x[0]) - width / 2.0 - 0.20
     connector_start = x_text + 0.06
     connector_end = float(x[0]) - width / 2.0 - 0.05
-    for j, name in enumerate(series_names):
+    for j, display_name in enumerate(display_names):
         y_ref = segment_centers[j][0] if segment_centers[j] else float("nan")
         if not np.isfinite(y_ref):
             for yc in segment_centers[j]:
@@ -209,7 +224,7 @@ def _plot_stacked_basileia(
         ax.text(
             x_text,
             float(y_ref),
-            str(name),
+            display_name,
             ha="right",
             va="center",
             fontsize=8.8,

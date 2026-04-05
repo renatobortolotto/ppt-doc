@@ -284,10 +284,7 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             key="slide15",
             label="slide 15",
             generator=generate_slide15_charts,
-            output_files=(
-                "31_indice_basileia_trimestres.png",
-                "32_basileia_pp_bridge.png",
-            ),
+            output_files=("15_captacoes_trimestres.png",),
         ),
         ChartGeneratorSpec(
             key="slide18",

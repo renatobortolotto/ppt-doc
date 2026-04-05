@@ -11,6 +11,7 @@ from utils.charts_common import close_figure
 
 SLIDE15_OUTPUT = "15_captacoes_trimestres.png"
 SLIDE15_SERIES_ROWS = (5, 6, 10, 11, 12, 13, 14, 15)
+SLIDE15_FIGSIZE = (10.2, 3.45)
 SLIDE15_COLORS = (
     "#123A7A",
     "#5B8FF9",
@@ -21,8 +22,8 @@ SLIDE15_COLORS = (
     "#F8BBD0",
     "#8E44AD",
 )
-SLIDE15_BAR_SLOT = 0.36
-SLIDE15_BAR_WIDTH = 0.30
+SLIDE15_BAR_SLOT = 0.44
+SLIDE15_BAR_WIDTH = 0.34
 SLIDE15_INNER_LABEL_FONT_SCALE = 1.0
 SLIDE15_BADGE_PAD = 0.10
 
@@ -110,7 +111,7 @@ def _plot_stacked_captacoes(
     if n == 0 or m == 0:
         raise ValueError("Sem dados para plotar")
 
-    fig, ax = plt.subplots(figsize=(10.2, 5.7), dpi=240)
+    fig, ax = plt.subplots(figsize=SLIDE15_FIGSIZE, dpi=240)
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
@@ -121,13 +122,15 @@ def _plot_stacked_captacoes(
     segment_centers: list[list[float]] = [[] for _ in range(m)]
     totals_per_bar = np.nansum(np.where(np.isfinite(values), values, 0.0), axis=1).astype(float)
     top_share_indices_per_bar = tuple(_top_share_indices(values[i, :], top_n=2) for i in range(n))
+    plot_values = np.where(np.isfinite(values), values, 0.0).astype(float)
 
     for j in range(m):
         y = np.asarray(values[:, j], dtype=float)
+        y_plot = np.asarray(plot_values[:, j], dtype=float)
         color = SLIDE15_COLORS[j % len(SLIDE15_COLORS)]
         ax.bar(
             x,
-            y,
+            y_plot,
             width=width,
             bottom=bottom,
             color=color,
@@ -155,7 +158,7 @@ def _plot_stacked_captacoes(
                 yc = float(bottom[i])
                 label = _fmt_value(0.0)
             else:
-                yc = float(bottom[i]) + value / 2.0
+                yc = float(bottom[i]) + float(y_plot[i]) / 2.0
                 label = _fmt_value(value)
 
             if show_share:
@@ -163,6 +166,13 @@ def _plot_stacked_captacoes(
                 label = f"{label}\n({_fmt_share_pct(share)})"
 
             segment_centers[j].append(yc)
+            badge_style = None
+            if abs(value) < 1e-12:
+                badge_style = {
+                    "facecolor": color,
+                    "edgecolor": "none",
+                    "boxstyle": f"round,pad={SLIDE15_BADGE_PAD}",
+                }
             ax.text(
                 float(x[i]),
                 yc,
@@ -173,26 +183,23 @@ def _plot_stacked_captacoes(
                 color=txt_color,
                 zorder=4,
                 linespacing=0.95,
-                bbox={
-                    "facecolor": color,
-                    "edgecolor": "none",
-                    "boxstyle": f"round,pad={SLIDE15_BADGE_PAD}",
-                },
+                bbox=badge_style,
                 clip_on=False,
             )
-        bottom = bottom + np.nan_to_num(y, nan=0.0)
+        bottom = bottom + np.nan_to_num(y_plot, nan=0.0)
 
-    totals = bottom.copy()
+    totals_plot = bottom.copy()
     total_label_tops: list[float] = []
-    for i, total in enumerate(totals):
-        if not np.isfinite(total):
+    for i, total_plot in enumerate(totals_plot):
+        if not np.isfinite(total_plot):
             continue
-        y_label = float(total) + max(abs(float(total)) * 0.03, 0.35)
+        total_value = float(totals_per_bar[i])
+        y_label = float(total_plot) + max(abs(float(total_plot)) * 0.03, 0.35)
         total_label_tops.append(y_label)
         ax.text(
             float(x[i]),
             y_label,
-            _fmt_value(total),
+            _fmt_value(total_value),
             ha="center",
             va="bottom",
             fontsize=9.8,
@@ -203,16 +210,18 @@ def _plot_stacked_captacoes(
         )
 
     if n >= 2:
-        abs_max = float(np.nanmax(np.abs(totals))) if np.isfinite(np.nanmax(np.abs(totals))) else 0.0
-        offset_y = max(abs_max * 0.08, 0.20)
-        bracket_h = max(abs_max * 0.03, 0.15)
-        top_labels_max = max(total_label_tops) if total_label_tops else float(np.nanmax(totals))
-        top_base = float(top_labels_max) + max(abs_max * 0.10, 0.35)
+        abs_max = (
+            float(np.nanmax(np.abs(totals_plot))) if np.isfinite(np.nanmax(np.abs(totals_plot))) else 0.0
+        )
+        offset_y = max(abs_max * 0.05, 0.16)
+        bracket_h = max(abs_max * 0.02, 0.11)
+        top_labels_max = max(total_label_tops) if total_label_tops else float(np.nanmax(totals_plot))
+        top_base = float(top_labels_max) + max(abs_max * 0.06, 0.24)
         max_text_y: float | None = None
 
         for i in range(1, n):
-            prev = float(totals[i - 1])
-            curr = float(totals[i])
+            prev = float(totals_per_bar[i - 1])
+            curr = float(totals_per_bar[i])
             if not np.isfinite(prev) or not np.isfinite(curr) or prev == 0:
                 continue
             pct = (curr / prev - 1.0) * 100.0
@@ -282,6 +291,7 @@ def _plot_stacked_captacoes(
             clip_on=False,
         )
 
+    ax.axhline(0.0, color="#b5b5b5", linewidth=0.9, zorder=1)
     ax.set_xlim(float(x.min()) - (left_margin + 0.10), float(x.max()) + 0.42)
     ax.set_xticks(x)
     ax.set_xticklabels(xlabels, fontsize=10.0)
@@ -290,7 +300,7 @@ def _plot_stacked_captacoes(
     for spine in ("left", "right", "top", "bottom"):
         ax.spines[spine].set_visible(False)
     ax.grid(False)
-    ax.margins(x=0.04, y=0.12)
+    ax.margins(x=0.04, y=0.06)
 
     fig.tight_layout(pad=0.25)
     output_path.parent.mkdir(parents=True, exist_ok=True)

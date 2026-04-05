@@ -51,13 +51,23 @@ class TestSlide19Charts(unittest.TestCase):
             captured["values"] = values.tolist()
             captured["veiculos_output_name"] = Path(output_path).name
 
-        def _capture_simple(*, xlabels, values, output_path, bar_color="#123A7A"):
+        def _capture_simple(
+            *,
+            xlabels,
+            values,
+            output_path,
+            bar_color="#123A7A",
+            bar_width=0.62,
+            bar_slot=1.0,
+        ):
             captured["simple_calls"].append(
                 {
                     "xlabels": list(xlabels),
                     "values": list(values),
                     "output_name": Path(output_path).name,
                     "bar_color": bar_color,
+                    "bar_width": bar_width,
+                    "bar_slot": bar_slot,
                 }
             )
 
@@ -95,12 +105,16 @@ class TestSlide19Charts(unittest.TestCase):
                     "values": [420.0, 354.0, 418.0],
                     "output_name": SLIDE19_SEGUROS_TRIMESTRES_OUTPUT,
                     "bar_color": "#123A7A",
+                    "bar_width": 0.62,
+                    "bar_slot": 1.0,
                 },
                 {
                     "xlabels": ["2024", "2025"],
                     "values": [1672.0, 1452.0],
                     "output_name": SLIDE19_SEGUROS_ANOS_OUTPUT,
                     "bar_color": "#123A7A",
+                    "bar_width": 0.22,
+                    "bar_slot": 0.38,
                 },
             ],
         )

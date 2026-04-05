@@ -21,7 +21,13 @@ SLIDE19_SERIES = (
 SLIDE19_FIGSIZE = (7.4, 3.5)
 SLIDE19_BAR_SLOT = 1.0
 SLIDE19_BAR_WIDTH = 0.66
+SLIDE19_STACKED_FONT_SCALE = 1.5
 SLIDE19_SIMPLE_BAR_COLOR = "#123A7A"
+SLIDE19_SIMPLE_FONT_SCALE = 1.5
+SLIDE19_SIMPLE_BAR_WIDTH = 0.62
+SLIDE19_SIMPLE_BAR_SLOT = 1.0
+SLIDE19_SIMPLE_ANOS_BAR_WIDTH = 0.22
+SLIDE19_SIMPLE_ANOS_BAR_SLOT = 0.38
 
 
 def _read_range_row(ws, cell_range: str) -> list[object]:
@@ -164,7 +170,7 @@ def _plot_stacked_veiculos(
                 label,
                 ha="center",
                 va="center",
-                fontsize=8.8,
+                fontsize=8.8 * SLIDE19_STACKED_FONT_SCALE,
                 color=txt_color,
                 zorder=4,
                 linespacing=0.95,
@@ -185,7 +191,7 @@ def _plot_stacked_veiculos(
             _fmt_value(total),
             ha="center",
             va="bottom",
-            fontsize=9.8,
+            fontsize=9.8 * SLIDE19_STACKED_FONT_SCALE,
             fontweight="bold" if i == n - 1 else "normal",
             color="#2f2f2f",
             zorder=5,
@@ -222,7 +228,7 @@ def _plot_stacked_veiculos(
                 _fmt_bracket_pct(curr, prev),
                 ha="center",
                 va="bottom",
-                fontsize=9.0,
+                fontsize=9.0 * SLIDE19_STACKED_FONT_SCALE,
                 color="#2f2f2f",
                 zorder=5,
             )
@@ -233,7 +239,7 @@ def _plot_stacked_veiculos(
             ax.set_ylim(ymin, max(ymax, max_text_y + offset_y * 0.9))
 
     max_name_len = max((len(str(name).strip()) for name in series_names), default=1)
-    left_margin = max(1.55, 0.78 + max_name_len * 0.043)
+    left_margin = max(1.95, 0.92 + max_name_len * 0.055)
     x_text = float(x[0]) - width / 2.0 - 0.20
     connector_start = x_text + 0.06
     connector_end = float(x[0]) - width / 2.0 - 0.05
@@ -262,7 +268,7 @@ def _plot_stacked_veiculos(
             str(name),
             ha="right",
             va="center",
-            fontsize=8.8,
+            fontsize=8.8 * SLIDE19_STACKED_FONT_SCALE,
             color="#2f2f2f",
             zorder=7,
             clip_on=False,
@@ -271,7 +277,7 @@ def _plot_stacked_veiculos(
     ax.axhline(0.0, color="#b5b5b5", linewidth=0.9, zorder=1)
     ax.set_xlim(float(x.min()) - (left_margin + 0.10), float(x.max()) + 0.36)
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * SLIDE19_STACKED_FONT_SCALE)
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for spine in ("left", "right", "top", "bottom"):
@@ -291,6 +297,8 @@ def _plot_simple_bars(
     values: list[float] | np.ndarray,
     output_path: Path,
     bar_color: str = SLIDE19_SIMPLE_BAR_COLOR,
+    bar_width: float = SLIDE19_SIMPLE_BAR_WIDTH,
+    bar_slot: float = SLIDE19_SIMPLE_BAR_SLOT,
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -303,8 +311,8 @@ def _plot_simple_bars(
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    x = np.arange(n, dtype=float)
-    bars = ax.bar(x, vals, width=0.62, color=bar_color, edgecolor="none", zorder=2)
+    x = np.arange(n, dtype=float) * float(bar_slot)
+    bars = ax.bar(x, vals, width=float(bar_width), color=bar_color, edgecolor="none", zorder=2)
 
     label_tops: list[float] = []
     for i, (rect, value) in enumerate(zip(bars, vals)):
@@ -318,7 +326,7 @@ def _plot_simple_bars(
             _fmt_value(value),
             ha="center",
             va="bottom",
-            fontsize=9.8,
+            fontsize=9.8 * SLIDE19_SIMPLE_FONT_SCALE,
             fontweight="bold" if i == n - 1 else "normal",
             color="#2f2f2f",
             zorder=4,
@@ -355,7 +363,7 @@ def _plot_simple_bars(
                 _fmt_bracket_pct(curr, prev),
                 ha="center",
                 va="bottom",
-                fontsize=9.0,
+                fontsize=9.0 * SLIDE19_SIMPLE_FONT_SCALE,
                 color="#2f2f2f",
                 zorder=5,
             )
@@ -367,7 +375,7 @@ def _plot_simple_bars(
 
     ax.axhline(0.0, color="#b5b5b5", linewidth=0.9, zorder=1)
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * SLIDE19_SIMPLE_FONT_SCALE)
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for spine in ("left", "right", "top", "bottom"):
@@ -424,6 +432,8 @@ def generate_slide19_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         xlabels=seguros_ano_labels,
         values=seguros_ano_values,
         output_path=seguros_ano_output,
+        bar_width=SLIDE19_SIMPLE_ANOS_BAR_WIDTH,
+        bar_slot=SLIDE19_SIMPLE_ANOS_BAR_SLOT,
     )
 
     return [output_path, seguros_trim_output, seguros_ano_output]

@@ -18,6 +18,7 @@ from utils.slide16_charts import generate_slide16_charts
 from utils.slide19_charts import generate_slide19_charts
 from utils.slide10_charts import generate_slide10_charts
 from utils.slide20_charts import generate_slide20_charts
+from utils.slide21_charts import generate_slide21_charts
 from utils.slide7_charts import generate_slide7_charts
 from utils.slide3_charts import generate_slide3_charts
 from utils.slide8_charts import generate_slide8_charts
@@ -326,6 +327,15 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             output_files=(
                 "20_emprestimos_empilhado.png",
                 "20_seguros_cartoes_trimestres.png",
+            ),
+        ),
+        ChartGeneratorSpec(
+            key="slide21",
+            label="slide 21",
+            generator=generate_slide21_charts,
+            output_files=(
+                "21_carteira_atacado_empilhado.png",
+                "21_carteira_atacado_comparativo.png",
             ),
         ),
     )

@@ -324,8 +324,8 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             label="slide 20",
             generator=generate_slide20_charts,
             output_files=(
-                "36_cib_empilhado.png",
-                "37_carteira_atacado_comparativo.png",
+                "20_emprestimos_empilhado.png",
+                "20_seguros_cartoes_trimestres.png",
             ),
         ),
     )

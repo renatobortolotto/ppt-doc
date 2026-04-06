@@ -20,7 +20,7 @@ SLIDE21_STACKED_BAR_WIDTH = 0.20
 SLIDE21_STACKED_FONT_SCALE = 1.2
 SLIDE21_COMPARATIVE_FIGSIZE = (13.6, 4.8)
 SLIDE21_COMPARATIVE_BAR_WIDTH = 0.36
-SLIDE21_COMPARATIVE_FONT_SCALE = 1.3
+SLIDE21_COMPARATIVE_FONT_SCALE = 1.7
 SLIDE21_COMPARATIVE_COLORS = ("#1E4588", "#5B84E8")
 SLIDE21_STACKED_COLOR_BY_KEY = {
     "pme": "#9AA0A6",
@@ -399,8 +399,8 @@ def _plot_comparative_bars(
         float(np.nanmax(right)) if right.size else 0.0,
     )
     label_gap = max(max_val * 0.02, 0.35)
-    overlap_threshold = max(max_val * 0.015, 0.18)
-    stagger_gap = max(max_val * 0.05, 0.55)
+    overlap_threshold = max(max_val * 0.02, 0.24)
+    stagger_gap = max(max_val * 0.09, 0.95)
     label_top_max = 0.0
 
     for left_rect, right_rect, left_value, right_value in zip(bars_left, bars_right, left, right):

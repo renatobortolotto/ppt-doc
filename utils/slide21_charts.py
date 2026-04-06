@@ -411,14 +411,20 @@ def _plot_comparative_bars(
                 ha="center",
                 va="bottom",
                 fontsize=9.4 * SLIDE21_COMPARATIVE_FONT_SCALE,
-                fontweight="bold",
+                fontweight="normal",
                 color="#3f3f3f",
                 zorder=4,
                 clip_on=False,
             )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(categories, rotation=45, ha="right", fontsize=9.2 * SLIDE21_COMPARATIVE_FONT_SCALE)
+    ax.set_xticklabels(
+        categories,
+        rotation=90,
+        ha="center",
+        va="top",
+        fontsize=9.2 * SLIDE21_COMPARATIVE_FONT_SCALE,
+    )
     ax.tick_params(axis="x", bottom=False, pad=6)
     ax.set_yticks([])
     for spine in ("left", "right", "top", "bottom"):
@@ -428,14 +434,14 @@ def _plot_comparative_bars(
     ax.legend(
         [bars_left[0], bars_right[0]],
         [label_left, label_right],
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.20),
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.02),
         ncol=2,
         frameon=False,
         fontsize=10.0 * SLIDE21_COMPARATIVE_FONT_SCALE,
     )
 
-    ylim_top = max(max_val * 2.0, max_val + label_gap + max(max_val * 0.06, 0.8))
+    ylim_top = max_val + label_gap + max(max_val * 0.06, 0.8)
     ax.set_ylim(0.0, ylim_top)
 
     fig.tight_layout(pad=0.35)

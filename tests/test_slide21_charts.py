@@ -9,11 +9,17 @@ from openpyxl import Workbook
 from utils.slide21_charts import (
     SLIDE21_COMPARATIVE_OUTPUT,
     SLIDE21_STACKED_OUTPUT,
+    _fmt_comparative_value,
     generate_slide21_charts,
 )
 
 
 class TestSlide21Charts(unittest.TestCase):
+    def test_fmt_comparative_value_forces_integer_rounding(self):
+        self.assertEqual(_fmt_comparative_value(12.4), "12%")
+        self.assertEqual(_fmt_comparative_value(12.5), "13%")
+        self.assertEqual(_fmt_comparative_value(12.6), "13%")
+
     def test_generate_slide21_charts_uses_expected_ranges(self):
         wb = Workbook()
         ws_carteira = wb.active

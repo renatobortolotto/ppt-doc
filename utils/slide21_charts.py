@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 import numpy as np
@@ -81,10 +82,8 @@ def _fmt_bracket_pct(curr: float, prev: float) -> str:
 
 
 def _fmt_comparative_value(v: float) -> str:
-    value = float(v)
-    if abs(value - round(value)) < 1e-9:
-        return f"{int(round(value))}%"
-    return f"{value:.1f}%".replace(".", ",")
+    rounded = int(Decimal(str(float(v))).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return f"{rounded}%"
 
 
 def _text_color_for_bg_rgba(rgba) -> str:

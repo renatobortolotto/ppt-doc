@@ -19,7 +19,7 @@ SLIDE21_STACKED_BAR_WIDTH = 0.20
 SLIDE21_STACKED_FONT_SCALE = 1.2
 SLIDE21_COMPARATIVE_FIGSIZE = (13.6, 4.8)
 SLIDE21_COMPARATIVE_BAR_WIDTH = 0.36
-SLIDE21_COMPARATIVE_FONT_SCALE = 1.0
+SLIDE21_COMPARATIVE_FONT_SCALE = 1.3
 SLIDE21_COMPARATIVE_COLORS = ("#1E4588", "#5B84E8")
 SLIDE21_STACKED_COLOR_BY_KEY = {
     "pme": "#9AA0A6",
@@ -400,14 +400,41 @@ def _plot_comparative_bars(
         float(np.nanmax(right)) if right.size else 0.0,
     )
     label_gap = max(max_val * 0.02, 0.35)
-    for bars, values in ((bars_left, left), (bars_right, right)):
-        for rect, value in zip(bars, values):
-            if not np.isfinite(value):
-                continue
+    overlap_threshold = max(max_val * 0.015, 0.18)
+    stagger_gap = max(max_val * 0.05, 0.55)
+    label_top_max = 0.0
+
+    for left_rect, right_rect, left_value, right_value in zip(bars_left, bars_right, left, right):
+        left_y = float(left_rect.get_height()) + label_gap if np.isfinite(left_value) else None
+        right_y = float(right_rect.get_height()) + label_gap if np.isfinite(right_value) else None
+
+        if left_y is not None and right_y is not None and abs(left_y - right_y) <= overlap_threshold:
+            if right_y >= left_y:
+                right_y += stagger_gap
+            else:
+                left_y += stagger_gap
+
+        if left_y is not None:
+            label_top_max = max(label_top_max, left_y)
             ax.text(
-                rect.get_x() + rect.get_width() / 2.0,
-                float(rect.get_height()) + label_gap,
-                _fmt_comparative_value(value),
+                left_rect.get_x() + left_rect.get_width() / 2.0,
+                left_y,
+                _fmt_comparative_value(left_value),
+                ha="center",
+                va="bottom",
+                fontsize=9.4 * SLIDE21_COMPARATIVE_FONT_SCALE,
+                fontweight="normal",
+                color="#3f3f3f",
+                zorder=4,
+                clip_on=False,
+            )
+
+        if right_y is not None:
+            label_top_max = max(label_top_max, right_y)
+            ax.text(
+                right_rect.get_x() + right_rect.get_width() / 2.0,
+                right_y,
+                _fmt_comparative_value(right_value),
                 ha="center",
                 va="bottom",
                 fontsize=9.4 * SLIDE21_COMPARATIVE_FONT_SCALE,
@@ -441,7 +468,7 @@ def _plot_comparative_bars(
         fontsize=10.0 * SLIDE21_COMPARATIVE_FONT_SCALE,
     )
 
-    ylim_top = max_val + label_gap + max(max_val * 0.06, 0.8)
+    ylim_top = max(max_val + label_gap + max(max_val * 0.06, 0.8), label_top_max + max(max_val * 0.04, 0.45))
     ax.set_ylim(0.0, ylim_top)
 
     fig.tight_layout(pad=0.35)

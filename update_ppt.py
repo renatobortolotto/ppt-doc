@@ -506,10 +506,30 @@ def update_presentation(
                         missing_files.append(text)
 
     if xlsx_path is not None:
-        apply_slide24_table_to_presentation(
-            prs,
-            xlsx_path=xlsx_path,
-        )
+        try:
+            slide24_result = apply_slide24_table_to_presentation(
+                prs,
+                xlsx_path=xlsx_path,
+            )
+            if slide24_result.found:
+                logging.info(
+                    "Tabela do slide 24 atualizada: slide=%s shape=%s written=%d fixed=%d spanned=%d",
+                    slide24_result.slide_index,
+                    slide24_result.shape_name,
+                    slide24_result.written_cells,
+                    slide24_result.skipped_fixed_cells,
+                    slide24_result.skipped_spanned_cells,
+                )
+            else:
+                logging.info(
+                    "Tabela do slide 24 não encontrada no PPT (alt text esperado: %s).",
+                    "TABLE_SLIDE24_DRE",
+                )
+        except Exception as exc:
+            logging.warning(
+                "Falha ao atualizar a tabela do slide 24; o restante do PPT seguirá normalmente. Erro: %s",
+                exc,
+            )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # If input == output, write to a temp file first, then replace.

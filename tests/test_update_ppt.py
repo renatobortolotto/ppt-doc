@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from openpyxl import Workbook
 from pptx import Presentation
@@ -106,6 +107,33 @@ class TestUpdatePpt(unittest.TestCase):
         styled_run = updated_table.cell(2, 1).text_frame.paragraphs[0].runs[0]
         self.assertEqual(int(round(styled_run.font.size.pt)), 20)
         self.assertTrue(styled_run.font.bold)
+
+    def test_update_presentation_keeps_updating_when_slide24_table_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            pptx_path = tmpdir / "input.pptx"
+            output_path = tmpdir / "output.pptx"
+            xlsx_path = tmpdir / "input.xlsx"
+
+            wb = Workbook()
+            wb.active.title = "DRE Saida"
+            wb.save(xlsx_path)
+
+            prs = Presentation()
+            prs.slides.add_slide(prs.slide_layouts[6])
+            prs.save(pptx_path)
+
+            with patch("update_ppt.apply_slide24_table_to_presentation", side_effect=ValueError("layout incompatível")):
+                update_presentation(
+                    pptx_path=pptx_path,
+                    output_path=output_path,
+                    images_dir=tmpdir,
+                    allow_placeholder_text=False,
+                    text_json=None,
+                    xlsx_path=xlsx_path,
+                )
+
+            self.assertTrue(output_path.exists())
 
 
 if __name__ == "__main__":

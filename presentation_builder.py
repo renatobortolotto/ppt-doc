@@ -19,6 +19,7 @@ from utils.slide19_charts import generate_slide19_charts
 from utils.slide10_charts import generate_slide10_charts
 from utils.slide20_charts import generate_slide20_charts
 from utils.slide21_charts import generate_slide21_charts
+from utils.slide22_charts import generate_slide22_charts
 from utils.slide7_charts import generate_slide7_charts
 from utils.slide3_charts import generate_slide3_charts
 from utils.slide8_charts import generate_slide8_charts
@@ -336,6 +337,24 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             output_files=(
                 "21_carteira_atacado_empilhado.png",
                 "21_carteira_atacado_comparativo.png",
+            ),
+        ),
+        ChartGeneratorSpec(
+            key="slide22",
+            label="slide 22",
+            generator=generate_slide22_charts,
+            output_files=(
+                "22_qualidade_4966_bloco1.png",
+                "22_qualidade_4966_bloco2.png",
+                "22_qualidade_4966_bloco3.png",
+                "22_qualidade_4966_linha1.png",
+                "22_qualidade_4966_linha2.png",
+                "22_qualidade_4966_linha3.png",
+                "22_carteira_reestruturada_barras.png",
+                "22_carteira_reestruturada_linha.png",
+                "22_cobertura_reestruturada_linha.png",
+                "22_npl_barras.png",
+                "22_npl_linha.png",
             ),
         ),
     )

@@ -14,8 +14,8 @@ SLIDE24_TABLE_ALT_TEXT = "TABLE_SLIDE24_DRE"
 SLIDE24_SHEET_NAME = "DRE Saida"
 SLIDE24_HEADER_RANGE = "C3:K4"
 SLIDE24_VALUES_RANGE = "C5:K18"
-SLIDE24_FIXED_COORDS = frozenset({"C3"})
-SLIDE24_VALUES_TARGET_START = (2, 0)
+SLIDE24_FIXED_COORDS = frozenset({"C3", "C4"})
+SLIDE24_VALUES_TARGET_START_COL = 0
 
 
 @dataclass(frozen=True)
@@ -199,43 +199,92 @@ def _collect_writable_target_row_cells(table, row_idx: int):
     return cells
 
 
+def _build_source_header_items(*, values: list[list[str]], source_range: str) -> list[list[str]]:
+    min_col, min_row, _max_col, _max_row = range_boundaries(source_range)
+    built: list[list[str]] = []
+    for row_offset, row_values in enumerate(values):
+        items: list[str] = []
+        for col_offset, rendered_value in enumerate(row_values):
+            source_coord = f"{get_column_letter(min_col + col_offset)}{min_row + row_offset}"
+            if source_coord in SLIDE24_FIXED_COORDS:
+                continue
+            if rendered_value == "":
+                continue
+            items.append(rendered_value)
+        built.append(items)
+    return built
+
+
+def _resolve_header_target_rows(table, *, source_items_by_row: list[list[str]]) -> list[int]:
+    max_probe_rows = min(len(table.rows), 6)
+    candidate_rows = [
+        (row_idx, len(_collect_writable_target_row_cells(table, row_idx)))
+        for row_idx in range(max_probe_rows)
+    ]
+
+    selected_rows: list[int] = []
+    min_row_idx = 0
+    for source_items in source_items_by_row:
+        required = len(source_items)
+        if required == 0:
+            selected_rows.append(min_row_idx)
+            min_row_idx += 1
+            continue
+
+        matching = [
+            row_idx
+            for row_idx, visible_count in candidate_rows
+            if row_idx >= min_row_idx and visible_count >= required
+        ]
+        if matching:
+            chosen = matching[0]
+            selected_rows.append(chosen)
+            min_row_idx = chosen + 1
+            continue
+
+        fallback_candidates = [item for item in candidate_rows if item[0] >= min_row_idx]
+        if not fallback_candidates:
+            raise ValueError(
+                "Não encontrei linhas suficientes no cabeçalho da tabela do PowerPoint para mapear o slide 24."
+            )
+        chosen = max(fallback_candidates, key=lambda item: item[1])[0]
+        selected_rows.append(chosen)
+        min_row_idx = chosen + 1
+
+    return selected_rows
+
+
 def _apply_header_rows(
     *,
     table,
     values: list[list[str]],
     source_range: str,
-) -> tuple[int, int, int]:
-    min_col, min_row, _max_col, _max_row = range_boundaries(source_range)
-    if len(table.rows) < len(values):
-        raise ValueError(
-            "Tabela do PowerPoint menor que o cabeçalho esperado do slide 24: "
-            f"ppt_rows={len(table.rows)} header_rows={len(values)}"
-        )
+) -> tuple[int, int, int, list[int]]:
+    source_items_by_row = _build_source_header_items(values=values, source_range=source_range)
+    target_rows = _resolve_header_target_rows(table, source_items_by_row=source_items_by_row)
 
     written_cells = 0
     skipped_fixed_cells = 0
     skipped_spanned_cells = 0
 
-    for row_offset, row_values in enumerate(values):
-        source_items: list[str] = []
-        for col_offset, rendered_value in enumerate(row_values):
+    for row_offset, source_items in enumerate(source_items_by_row):
+        min_col, min_row, _max_col, _max_row = range_boundaries(source_range)
+        for col_offset, rendered_value in enumerate(values[row_offset]):
             source_coord = f"{get_column_letter(min_col + col_offset)}{min_row + row_offset}"
             if source_coord in SLIDE24_FIXED_COORDS:
                 skipped_fixed_cells += 1
-                continue
             if rendered_value == "":
                 continue
-            source_items.append(rendered_value)
 
-        target_cells = _collect_writable_target_row_cells(table, row_offset)
+        target_row_idx = target_rows[row_offset]
+        target_cells = _collect_writable_target_row_cells(table, target_row_idx)
         row_spanned = len(table.columns) - len(target_cells)
         skipped_spanned_cells += max(0, row_spanned)
 
         if len(target_cells) < len(source_items):
-            raise ValueError(
-                "Cabeçalho do PowerPoint tem menos células visíveis do que o esperado: "
-                f"row={row_offset} ppt_visible={len(target_cells)} source_values={len(source_items)}"
-            )
+            # Fallback conservador: usa as células disponíveis da direita e mantém
+            # o restante do cabeçalho do template intacto.
+            source_items = source_items[-len(target_cells):]
 
         if len(target_cells) > len(source_items):
             # Em templates corporativos, o excedente tende a ficar à esquerda
@@ -246,7 +295,7 @@ def _apply_header_rows(
             _set_cell_text_preserving_style(target_cell, rendered_value)
             written_cells += 1
 
-    return written_cells, skipped_fixed_cells, skipped_spanned_cells
+    return written_cells, skipped_fixed_cells, skipped_spanned_cells, target_rows
 
 
 def _apply_table_block(
@@ -329,31 +378,18 @@ def apply_slide24_table_to_presentation(
 
     slide_index, shape = table_location
     table = shape.table
-    expected_rows = max(
-        SLIDE24_VALUES_TARGET_START[0] + len(body_values),
-        len(header_values),
-    )
-    expected_cols = max(
-        SLIDE24_VALUES_TARGET_START[1] + (len(body_values[0]) if body_values else 0),
-        len(header_values[0]) if header_values else 0,
-    )
-    if len(table.rows) < expected_rows or len(table.columns) < expected_cols:
-        raise ValueError(
-            "Tabela do PowerPoint menor que o range esperado do slide 24: "
-            f"ppt={len(table.rows)}x{len(table.columns)} range={expected_rows}x{expected_cols}"
-        )
-
-    header_written, header_fixed, header_spanned = _apply_header_rows(
+    header_written, header_fixed, header_spanned, header_target_rows = _apply_header_rows(
         table=table,
         values=header_values,
         source_range=header_range,
     )
+    values_target_start_row = (max(header_target_rows) + 1) if header_target_rows else 2
     body_written, body_fixed, body_spanned = _apply_table_block(
         table=table,
         values=body_values,
         source_range=values_range,
-        target_start_row=SLIDE24_VALUES_TARGET_START[0],
-        target_start_col=SLIDE24_VALUES_TARGET_START[1],
+        target_start_row=values_target_start_row,
+        target_start_col=SLIDE24_VALUES_TARGET_START_COL,
         skip_empty=False,
     )
 

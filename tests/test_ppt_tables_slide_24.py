@@ -128,7 +128,7 @@ class TestPptTablesSlide24(unittest.TestCase):
 
         self.assertTrue(result.found)
         self.assertEqual(result.slide_index, 1)
-        self.assertEqual(result.skipped_fixed_cells, 1)
+        self.assertEqual(result.skipped_fixed_cells, 2)
         self.assertEqual(result.skipped_spanned_cells, 8)
         self.assertEqual(table.cell(0, 0).text, "FIXED PPT")
         self.assertEqual(table.cell(0, 1).text, "4T24")

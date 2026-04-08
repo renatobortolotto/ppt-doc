@@ -354,6 +354,12 @@ def _plot_two_point_lines(
     values: np.ndarray,  # [n_series, n_points]
     output_path: Path,
     label_decimals: int = 0,
+    label_font_scale: float = 1.0,
+    x_tick_font_scale: float = 1.0,
+    label_offset_factor: float = 0.06,
+    label_offset_min: float = 1.6,
+    y_pad_factor: float = 0.35,
+    y_pad_min: float = 3.5,
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -372,7 +378,7 @@ def _plot_two_point_lines(
     finite_values = values_arr[np.isfinite(values_arr)]
     y_min = float(np.nanmin(finite_values)) if finite_values.size else 0.0
     y_max = float(np.nanmax(finite_values)) if finite_values.size else 0.0
-    y_pad = max((y_max - y_min) * 0.35, 3.5)
+    y_pad = max((y_max - y_min) * float(y_pad_factor), float(y_pad_min))
 
     for idx in range(n_series):
         series = np.asarray(values_arr[idx, :], dtype=float)
@@ -391,7 +397,7 @@ def _plot_two_point_lines(
         for point_idx, (xi, yi) in enumerate(zip(x, series)):
             if not np.isfinite(yi):
                 continue
-            label_offset = max((y_max - y_min) * 0.06, 1.6)
+            label_offset = max((y_max - y_min) * float(label_offset_factor), float(label_offset_min))
             direction = -1.0 if idx > 0 else 1.0
             ax.text(
                 float(xi),
@@ -399,7 +405,7 @@ def _plot_two_point_lines(
                 _fmt_pct_int(yi) if label_decimals == 0 else _fmt_pct(yi),
                 ha="center",
                 va="bottom" if direction > 0 else "top",
-                fontsize=9.4 * SLIDE22_LINE_FONT_SCALE,
+                fontsize=9.4 * SLIDE22_LINE_FONT_SCALE * float(label_font_scale),
                 fontweight="normal",
                 color=color,
                 zorder=3,
@@ -409,7 +415,7 @@ def _plot_two_point_lines(
     ax.set_xlim(float(x.min()) - 0.08, float(x.max()) + 0.08)
     ax.set_ylim(max(0.0, y_min - y_pad), min(100.0, y_max + y_pad))
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=11.0 * SLIDE22_LINE_FONT_SCALE)
+    ax.set_xticklabels(xlabels, fontsize=11.0 * SLIDE22_LINE_FONT_SCALE * float(x_tick_font_scale))
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for spine in ("left", "right", "top", "bottom"):
@@ -428,6 +434,14 @@ def _plot_two_bar_values(
     xlabels: list[str],
     values: np.ndarray,  # [n_points]
     output_path: Path,
+    bar_width: float = SLIDE22_SIMPLE_BAR_WIDTH,
+    bar_slot: float = SLIDE22_SIMPLE_BAR_SLOT,
+    font_scale: float = 1.0,
+    bracket_anchor: str = "center",
+    bracket_top_gap_scale: float = 0.08,
+    bracket_top_gap_min: float = 18.0,
+    bracket_label_clearance: float = 0.0,
+    x_margin: float | None = None,
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -440,11 +454,12 @@ def _plot_two_bar_values(
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    x = np.arange(n, dtype=float) * SLIDE22_SIMPLE_BAR_SLOT
+    width = float(bar_width)
+    x = np.arange(n, dtype=float) * float(bar_slot)
     bars = ax.bar(
         x,
         vals,
-        width=SLIDE22_SIMPLE_BAR_WIDTH,
+        width=width,
         color=SLIDE22_SIMPLE_BAR_COLOR,
         edgecolor="none",
         zorder=2,
@@ -462,7 +477,7 @@ def _plot_two_bar_values(
             _fmt_num_int(value),
             ha="center",
             va="bottom",
-            fontsize=10.0,
+            fontsize=10.0 * float(font_scale),
             fontweight="bold" if i == n - 1 else "normal",
             color="#2f2f2f",
             zorder=4,
@@ -474,12 +489,24 @@ def _plot_two_bar_values(
         offset_y = max(abs_max * 0.08, 16.0)
         bracket_h = max(abs_max * 0.03, 10.0)
         top_labels_max = max(label_tops) if label_tops else float(np.nanmax(vals))
-        top_base = float(top_labels_max) + max(abs_max * 0.14, 30.0)
+        top_base = (
+            float(top_labels_max)
+            + max(abs_max * float(bracket_top_gap_scale), float(bracket_top_gap_min))
+            + float(bracket_label_clearance)
+        )
         prev = float(vals[0])
         curr = float(vals[1])
         if np.isfinite(prev) and np.isfinite(curr) and abs(prev) > 1e-12:
-            x1 = float(x[0])
-            x2 = float(x[1])
+            if bracket_anchor == "outer_edges":
+                edge_pad = width * 0.08
+                x1 = float(x[0]) - width / 2.0 - edge_pad
+                x2 = float(x[1]) + width / 2.0 + edge_pad
+            elif bracket_anchor == "inner_edges":
+                x1 = float(x[0]) + width / 2.0
+                x2 = float(x[1]) - width / 2.0
+            else:
+                x1 = float(x[0])
+                x2 = float(x[1])
             text_y = top_base + bracket_h + offset_y * 0.25
             ax.plot(
                 [x1, x1, x2, x2],
@@ -495,16 +522,17 @@ def _plot_two_bar_values(
                 _fmt_bracket_pct(curr, prev),
                 ha="center",
                 va="bottom",
-                fontsize=9.2,
+                fontsize=9.2 * float(font_scale),
                 color="#2f2f2f",
                 zorder=5,
             )
             ymin, ymax = ax.get_ylim()
             ax.set_ylim(ymin, max(ymax, text_y + offset_y * 0.8))
 
-    ax.set_xlim(float(x.min()) - 0.34, float(x.max()) + 0.34)
+    side_margin = float(x_margin) if x_margin is not None else max(width * 0.7, 0.22)
+    ax.set_xlim(float(x.min()) - side_margin, float(x.max()) + side_margin)
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=11.0)
+    ax.set_xticklabels(xlabels, fontsize=11.0 * float(font_scale))
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for spine in ("left", "right", "top", "bottom"):
@@ -576,6 +604,14 @@ def generate_slide22_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         xlabels=xlabels_reestruturada,
         values=reestruturada_bar_values,
         output_path=reestruturada_bar_output,
+        bar_width=0.22,
+        bar_slot=0.24,
+        font_scale=1.5,
+        bracket_anchor="center",
+        bracket_top_gap_scale=0.18,
+        bracket_top_gap_min=55.0,
+        bracket_label_clearance=24.0,
+        x_margin=0.12,
     )
     generated.append(reestruturada_bar_output)
 
@@ -591,6 +627,11 @@ def generate_slide22_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         values=reestruturada_line_values.reshape(1, -1),
         output_path=reestruturada_line_output,
         label_decimals=1,
+        label_font_scale=1.6,
+        label_offset_factor=0.02,
+        label_offset_min=0.10,
+        y_pad_factor=0.18,
+        y_pad_min=0.28,
     )
     generated.append(reestruturada_line_output)
 
@@ -623,6 +664,9 @@ def generate_slide22_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         xlabels=xlabels_npl,
         values=npl_bar_values,
         output_path=npl_bar_output,
+        bracket_top_gap_scale=0.12,
+        bracket_top_gap_min=36.0,
+        bracket_label_clearance=18.0,
     )
     generated.append(npl_bar_output)
 

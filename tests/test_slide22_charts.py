@@ -79,22 +79,53 @@ class TestSlide22Charts(unittest.TestCase):
                 }
             )
 
-        def _capture_line_plot(*, xlabels, values, output_path, label_decimals=0):
+        def _capture_line_plot(
+            *,
+            xlabels,
+            values,
+            output_path,
+            label_decimals=0,
+            label_font_scale=1.0,
+            x_tick_font_scale=1.0,
+            label_offset_factor=0.06,
+            label_offset_min=1.6,
+            y_pad_factor=0.35,
+            y_pad_min=3.5,
+        ):
             captured_line_calls.append(
                 {
                     "xlabels": list(xlabels),
                     "values": values.tolist(),
                     "output_name": Path(output_path).name,
                     "label_decimals": label_decimals,
+                    "label_font_scale": label_font_scale,
+                    "x_tick_font_scale": x_tick_font_scale,
+                    "label_offset_factor": label_offset_factor,
+                    "label_offset_min": label_offset_min,
+                    "y_pad_factor": y_pad_factor,
+                    "y_pad_min": y_pad_min,
                 }
             )
 
-        def _capture_bar_plot(*, xlabels, values, output_path):
+        def _capture_bar_plot(
+            *,
+            xlabels,
+            values,
+            output_path,
+            bar_width=0.58,
+            bar_slot=1.0,
+            font_scale=1.0,
+            **kwargs,
+        ):
             captured_bar_calls.append(
                 {
                     "xlabels": list(xlabels),
                     "values": list(values),
                     "output_name": Path(output_path).name,
+                    "bar_width": bar_width,
+                    "bar_slot": bar_slot,
+                    "font_scale": font_scale,
+                    **kwargs,
                 }
             )
 
@@ -170,11 +201,25 @@ class TestSlide22Charts(unittest.TestCase):
                     "xlabels": ["3T25", "4T25"],
                     "values": [515.299, 533.967],
                     "output_name": "22_carteira_reestruturada_barras.png",
+                    "bar_width": 0.22,
+                    "bar_slot": 0.24,
+                    "font_scale": 1.5,
+                    "bracket_anchor": "center",
+                    "bracket_top_gap_scale": 0.18,
+                    "bracket_top_gap_min": 55.0,
+                    "bracket_label_clearance": 24.0,
+                    "x_margin": 0.12,
                 },
                 {
                     "xlabels": ["3T25", "4T25"],
                     "values": [826.0, 457.0],
                     "output_name": "22_npl_barras.png",
+                    "bar_width": 0.58,
+                    "bar_slot": 1.0,
+                    "font_scale": 1.0,
+                    "bracket_top_gap_scale": 0.12,
+                    "bracket_top_gap_min": 36.0,
+                    "bracket_label_clearance": 18.0,
                 }
             ],
         )
@@ -187,6 +232,11 @@ class TestSlide22Charts(unittest.TestCase):
             ],
         )
         self.assertEqual([call["label_decimals"] for call in captured_line_calls[-3:]], [1, 1, 1])
+        self.assertEqual(captured_line_calls[-3]["label_font_scale"], 1.6)
+        self.assertEqual(captured_line_calls[-3]["label_offset_factor"], 0.02)
+        self.assertEqual(captured_line_calls[-3]["label_offset_min"], 0.10)
+        self.assertEqual(captured_line_calls[-3]["y_pad_factor"], 0.18)
+        self.assertEqual(captured_line_calls[-3]["y_pad_min"], 0.28)
         np.testing.assert_allclose(
             captured_line_calls[-3]["values"],
             [[0.6, 0.6]],

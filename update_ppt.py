@@ -13,6 +13,7 @@ from PIL import Image
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
+from utils.ppt_tables_slide_24 import apply_slide24_table_to_presentation
 
 
 def _replace_shape_with_picture(slide, shape, image_path: Path) -> None:
@@ -437,6 +438,7 @@ def update_presentation(
     images_dir: Path,
     allow_placeholder_text: bool,
     text_json: Path | None,
+    xlsx_path: Path | None = None,
     text_payload: object | None = None,
     pp_field_ids: Sequence[str] | None = None,
 ) -> tuple[int, int, int, list[str], list[str], list[str]]:
@@ -502,6 +504,12 @@ def update_presentation(
                 else:
                     if Path(text).suffix.lower() in {".png", ".jpg", ".jpeg"}:
                         missing_files.append(text)
+
+    if xlsx_path is not None:
+        apply_slide24_table_to_presentation(
+            prs,
+            xlsx_path=xlsx_path,
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     # If input == output, write to a temp file first, then replace.
@@ -599,6 +607,11 @@ mantendo posição/tamanho/crop."
             "Aceita formato direto {titles:{...},subtitles:{...}} ou wrapper {response:{...}}."
         ),
     )
+    parser.add_argument(
+        "--xlsx",
+        default=None,
+        help="Opcional: workbook XLSX usado para preencher a tabela do slide 24.",
+    )
     return parser.parse_args()
 
 
@@ -626,6 +639,8 @@ def main() -> None:
     logging.info("PPTX: %s", pptx_path)
     logging.info("Imagens: %s", images_dir)
     logging.info("Saída: %s", output_path)
+    if args.xlsx:
+        logging.info("XLSX: %s", Path(args.xlsx).expanduser().resolve())
 
     (
         replaced_pictures,
@@ -640,6 +655,7 @@ def main() -> None:
         images_dir=images_dir,
         allow_placeholder_text=bool(args.allow_placeholder_text),
         text_json=Path(args.text_json).expanduser().resolve() if args.text_json else None,
+        xlsx_path=Path(args.xlsx).expanduser().resolve() if args.xlsx else None,
     )
 
     logging.info(

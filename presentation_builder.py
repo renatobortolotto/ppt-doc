@@ -555,6 +555,7 @@ def build_presentation(
             images_dir=active_images_dir,
             allow_placeholder_text=allow_placeholder_text,
             text_json=None,
+            xlsx_path=xlsx_path,
             text_payload=text_mapping,
             pp_field_ids=pp_field_ids,
         )

@@ -108,6 +108,7 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertEqual(result.text_field_failures, ())
         update_mock.assert_called_once()
         self.assertEqual(update_mock.call_args.kwargs["pp_field_ids"], ())
+        self.assertEqual(update_mock.call_args.kwargs["xlsx_path"], self.repo_root / "testing.xlsx")
 
     def test_build_presentation_raises_clear_error_for_invalid_xlsx(self):
         with patch(
@@ -259,9 +260,10 @@ class TestPresentationBuilder(unittest.TestCase):
             captured["generate_only_slides"] = only_slides
             return ChartGenerationResult(generated_files=(images_dir / "slide8.png",), failures=())
 
-        def _fake_update_presentation(*, pptx_path, output_path, images_dir, allow_placeholder_text, text_json, text_payload, pp_field_ids):
+        def _fake_update_presentation(*, pptx_path, output_path, images_dir, allow_placeholder_text, text_json, xlsx_path, text_payload, pp_field_ids):
             captured["update_images_dir"] = images_dir
             captured["update_pp_field_ids"] = pp_field_ids
+            captured["update_xlsx_path"] = xlsx_path
             return fake_result
 
         def _fake_persist_generated_chart_files(*, generated_files, target_dir):
@@ -311,6 +313,7 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertEqual(captured["generate_images_dir"], captured["update_images_dir"])
         self.assertNotEqual(captured["generate_images_dir"], self.repo_root)
         self.assertEqual(captured["update_pp_field_ids"], ("VAR_TEST",))
+        self.assertEqual(captured["update_xlsx_path"], self.repo_root / "testing.xlsx")
         self.assertEqual(captured["persist_generated_files"], (captured["generate_images_dir"] / "slide8.png",))
         self.assertEqual(captured["persist_target_dir"], self.repo_root)
 

@@ -360,6 +360,7 @@ def _plot_two_point_lines(
     label_offset_min: float = 1.6,
     y_pad_factor: float = 0.35,
     y_pad_min: float = 3.5,
+    show_xlabels: bool = True,
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -414,9 +415,13 @@ def _plot_two_point_lines(
 
     ax.set_xlim(float(x.min()) - 0.08, float(x.max()) + 0.08)
     ax.set_ylim(max(0.0, y_min - y_pad), min(100.0, y_max + y_pad))
-    ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=11.0 * SLIDE22_LINE_FONT_SCALE * float(x_tick_font_scale))
-    ax.tick_params(axis="x", bottom=False, pad=8)
+    if show_xlabels:
+        ax.set_xticks(x)
+        ax.set_xticklabels(xlabels, fontsize=11.0 * SLIDE22_LINE_FONT_SCALE * float(x_tick_font_scale))
+        ax.tick_params(axis="x", bottom=False, pad=8)
+    else:
+        ax.set_xticks([])
+        ax.tick_params(axis="x", bottom=False, labelbottom=False)
     ax.set_yticks([])
     for spine in ("left", "right", "top", "bottom"):
         ax.spines[spine].set_visible(False)
@@ -604,8 +609,8 @@ def generate_slide22_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         xlabels=xlabels_reestruturada,
         values=reestruturada_bar_values,
         output_path=reestruturada_bar_output,
-        bar_width=0.22,
-        bar_slot=0.24,
+        bar_width=0.066,
+        bar_slot=0.096,
         font_scale=1.5,
         bracket_anchor="center",
         bracket_top_gap_scale=0.18,
@@ -627,11 +632,12 @@ def generate_slide22_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         values=reestruturada_line_values.reshape(1, -1),
         output_path=reestruturada_line_output,
         label_decimals=1,
-        label_font_scale=1.6,
-        label_offset_factor=0.02,
-        label_offset_min=0.10,
+        label_font_scale=2.24,
+        label_offset_factor=0.008,
+        label_offset_min=0.05,
         y_pad_factor=0.18,
         y_pad_min=0.28,
+        show_xlabels=False,
     )
     generated.append(reestruturada_line_output)
 
@@ -682,6 +688,10 @@ def generate_slide22_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         values=npl_line_values.reshape(1, -1),
         output_path=npl_line_output,
         label_decimals=1,
+        label_font_scale=2.24,
+        label_offset_factor=0.008,
+        label_offset_min=0.05,
+        show_xlabels=False,
     )
     generated.append(npl_line_output)
 

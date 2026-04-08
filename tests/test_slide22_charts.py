@@ -91,6 +91,7 @@ class TestSlide22Charts(unittest.TestCase):
             label_offset_min=1.6,
             y_pad_factor=0.35,
             y_pad_min=3.5,
+            show_xlabels=True,
         ):
             captured_line_calls.append(
                 {
@@ -104,6 +105,7 @@ class TestSlide22Charts(unittest.TestCase):
                     "label_offset_min": label_offset_min,
                     "y_pad_factor": y_pad_factor,
                     "y_pad_min": y_pad_min,
+                    "show_xlabels": show_xlabels,
                 }
             )
 
@@ -201,8 +203,8 @@ class TestSlide22Charts(unittest.TestCase):
                     "xlabels": ["3T25", "4T25"],
                     "values": [515.299, 533.967],
                     "output_name": "22_carteira_reestruturada_barras.png",
-                    "bar_width": 0.22,
-                    "bar_slot": 0.24,
+                    "bar_width": 0.066,
+                    "bar_slot": 0.096,
                     "font_scale": 1.5,
                     "bracket_anchor": "center",
                     "bracket_top_gap_scale": 0.18,
@@ -232,11 +234,12 @@ class TestSlide22Charts(unittest.TestCase):
             ],
         )
         self.assertEqual([call["label_decimals"] for call in captured_line_calls[-3:]], [1, 1, 1])
-        self.assertEqual(captured_line_calls[-3]["label_font_scale"], 1.6)
-        self.assertEqual(captured_line_calls[-3]["label_offset_factor"], 0.02)
-        self.assertEqual(captured_line_calls[-3]["label_offset_min"], 0.10)
+        self.assertEqual(captured_line_calls[-3]["label_font_scale"], 2.24)
+        self.assertEqual(captured_line_calls[-3]["label_offset_factor"], 0.008)
+        self.assertEqual(captured_line_calls[-3]["label_offset_min"], 0.05)
         self.assertEqual(captured_line_calls[-3]["y_pad_factor"], 0.18)
         self.assertEqual(captured_line_calls[-3]["y_pad_min"], 0.28)
+        self.assertEqual(captured_line_calls[-3]["show_xlabels"], False)
         np.testing.assert_allclose(
             captured_line_calls[-3]["values"],
             [[0.6, 0.6]],
@@ -255,6 +258,10 @@ class TestSlide22Charts(unittest.TestCase):
             rtol=0.0,
             atol=1e-9,
         )
+        self.assertEqual(captured_line_calls[-1]["label_font_scale"], 2.24)
+        self.assertEqual(captured_line_calls[-1]["label_offset_factor"], 0.008)
+        self.assertEqual(captured_line_calls[-1]["label_offset_min"], 0.05)
+        self.assertEqual(captured_line_calls[-1]["show_xlabels"], False)
         np.testing.assert_allclose(
             captured_calls[1]["values"],
             [[7.0, 82.8, 10.3], [6.5, 83.1, 10.4]],

@@ -688,7 +688,7 @@ def generate_slide22_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         values=npl_line_values.reshape(1, -1),
         output_path=npl_line_output,
         label_decimals=1,
-        label_font_scale=2.24,
+        label_font_scale=1.34,
         label_offset_factor=0.008,
         label_offset_min=0.05,
         show_xlabels=False,

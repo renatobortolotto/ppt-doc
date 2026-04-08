@@ -258,7 +258,7 @@ class TestSlide22Charts(unittest.TestCase):
             rtol=0.0,
             atol=1e-9,
         )
-        self.assertEqual(captured_line_calls[-1]["label_font_scale"], 2.24)
+        self.assertEqual(captured_line_calls[-1]["label_font_scale"], 1.34)
         self.assertEqual(captured_line_calls[-1]["label_offset_factor"], 0.008)
         self.assertEqual(captured_line_calls[-1]["label_offset_min"], 0.05)
         self.assertEqual(captured_line_calls[-1]["show_xlabels"], False)

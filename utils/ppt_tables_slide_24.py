@@ -12,8 +12,11 @@ from pptx import Presentation
 
 SLIDE24_TABLE_ALT_TEXT = "TABLE_SLIDE24_DRE"
 SLIDE24_SHEET_NAME = "DRE Saida"
-SLIDE24_SOURCE_RANGE = "C3:K18"
+SLIDE24_HEADER_RANGE = "C3:K4"
+SLIDE24_VALUES_RANGE = "C5:K18"
 SLIDE24_FIXED_COORDS = frozenset({"C3"})
+SLIDE24_HEADER_TARGET_START = (0, 0)
+SLIDE24_VALUES_TARGET_START = (2, 0)
 
 
 @dataclass(frozen=True)
@@ -128,11 +131,11 @@ def _format_slide24_cell(cell) -> str:
     return _coerce_text(value)
 
 
-def extract_slide24_table_values(
+def extract_slide24_table_block(
     *,
     xlsx_path: Path,
     sheet_name: str = SLIDE24_SHEET_NAME,
-    source_range: str = SLIDE24_SOURCE_RANGE,
+    source_range: str,
 ) -> list[list[str]]:
     wb = load_workbook(filename=xlsx_path, data_only=True)
     try:
@@ -151,6 +154,32 @@ def extract_slide24_table_values(
         wb.close()
 
 
+def extract_slide24_table_headers(
+    *,
+    xlsx_path: Path,
+    sheet_name: str = SLIDE24_SHEET_NAME,
+    source_range: str = SLIDE24_HEADER_RANGE,
+) -> list[list[str]]:
+    return extract_slide24_table_block(
+        xlsx_path=xlsx_path,
+        sheet_name=sheet_name,
+        source_range=source_range,
+    )
+
+
+def extract_slide24_table_values(
+    *,
+    xlsx_path: Path,
+    sheet_name: str = SLIDE24_SHEET_NAME,
+    source_range: str = SLIDE24_VALUES_RANGE,
+) -> list[list[str]]:
+    return extract_slide24_table_block(
+        xlsx_path=xlsx_path,
+        sheet_name=sheet_name,
+        source_range=source_range,
+    )
+
+
 def _find_table_shape(prs: Presentation, *, table_alt_text: str):
     for slide_idx, slide in enumerate(prs.slides, start=1):
         for shape in slide.shapes:
@@ -161,13 +190,56 @@ def _find_table_shape(prs: Presentation, *, table_alt_text: str):
     return None
 
 
+def _apply_table_block(
+    *,
+    table,
+    values: list[list[str]],
+    source_range: str,
+    target_start_row: int,
+    target_start_col: int,
+    skip_empty: bool,
+) -> tuple[int, int, int]:
+    min_col, min_row, _max_col, _max_row = range_boundaries(source_range)
+    expected_rows = target_start_row + len(values)
+    expected_cols = target_start_col + (len(values[0]) if values else 0)
+    if len(table.rows) < expected_rows or len(table.columns) < expected_cols:
+        raise ValueError(
+            "Tabela do PowerPoint menor que o bloco esperado do slide 24: "
+            f"ppt={len(table.rows)}x{len(table.columns)} bloco={expected_rows}x{expected_cols}"
+        )
+
+    written_cells = 0
+    skipped_fixed_cells = 0
+    skipped_spanned_cells = 0
+
+    for row_offset, row_values in enumerate(values):
+        for col_offset, rendered_value in enumerate(row_values):
+            source_coord = f"{get_column_letter(min_col + col_offset)}{min_row + row_offset}"
+            if source_coord in SLIDE24_FIXED_COORDS:
+                skipped_fixed_cells += 1
+                continue
+            if skip_empty and rendered_value == "":
+                continue
+
+            target_cell = table.cell(target_start_row + row_offset, target_start_col + col_offset)
+            if getattr(target_cell, "is_spanned", False):
+                skipped_spanned_cells += 1
+                continue
+
+            _set_cell_text_preserving_style(target_cell, rendered_value)
+            written_cells += 1
+
+    return written_cells, skipped_fixed_cells, skipped_spanned_cells
+
+
 def apply_slide24_table_to_presentation(
     prs: Presentation,
     *,
     xlsx_path: Path,
     table_alt_text: str = SLIDE24_TABLE_ALT_TEXT,
     sheet_name: str = SLIDE24_SHEET_NAME,
-    source_range: str = SLIDE24_SOURCE_RANGE,
+    header_range: str = SLIDE24_HEADER_RANGE,
+    values_range: str = SLIDE24_VALUES_RANGE,
     strict: bool = False,
 ) -> Slide24TableApplyResult:
     table_location = _find_table_shape(prs, table_alt_text=table_alt_text)
@@ -183,51 +255,59 @@ def apply_slide24_table_to_presentation(
             skipped_spanned_cells=0,
         )
 
-    values = extract_slide24_table_values(
+    header_values = extract_slide24_table_headers(
         xlsx_path=xlsx_path,
         sheet_name=sheet_name,
-        source_range=source_range,
+        source_range=header_range,
     )
-    if not values:
-        raise ValueError("Range da tabela do slide 24 não retornou valores.")
+    body_values = extract_slide24_table_values(
+        xlsx_path=xlsx_path,
+        sheet_name=sheet_name,
+        source_range=values_range,
+    )
+    if not header_values and not body_values:
+        raise ValueError("Ranges da tabela do slide 24 não retornaram valores.")
 
-    min_col, min_row, _max_col, _max_row = range_boundaries(source_range)
     slide_index, shape = table_location
     table = shape.table
-    expected_rows = len(values)
-    expected_cols = len(values[0])
+    expected_rows = max(
+        SLIDE24_HEADER_TARGET_START[0] + len(header_values),
+        SLIDE24_VALUES_TARGET_START[0] + len(body_values),
+    )
+    expected_cols = max(
+        SLIDE24_HEADER_TARGET_START[1] + (len(header_values[0]) if header_values else 0),
+        SLIDE24_VALUES_TARGET_START[1] + (len(body_values[0]) if body_values else 0),
+    )
     if len(table.rows) < expected_rows or len(table.columns) < expected_cols:
         raise ValueError(
             "Tabela do PowerPoint menor que o range esperado do slide 24: "
             f"ppt={len(table.rows)}x{len(table.columns)} range={expected_rows}x{expected_cols}"
         )
 
-    written_cells = 0
-    skipped_fixed_cells = 0
-    skipped_spanned_cells = 0
-
-    for row_offset, row_values in enumerate(values):
-        for col_offset, rendered_value in enumerate(row_values):
-            source_coord = f"{get_column_letter(min_col + col_offset)}{min_row + row_offset}"
-            if source_coord in SLIDE24_FIXED_COORDS:
-                skipped_fixed_cells += 1
-                continue
-
-            target_cell = table.cell(row_offset, col_offset)
-            if getattr(target_cell, "is_spanned", False):
-                skipped_spanned_cells += 1
-                continue
-
-            _set_cell_text_preserving_style(target_cell, rendered_value)
-            written_cells += 1
+    header_written, header_fixed, header_spanned = _apply_table_block(
+        table=table,
+        values=header_values,
+        source_range=header_range,
+        target_start_row=SLIDE24_HEADER_TARGET_START[0],
+        target_start_col=SLIDE24_HEADER_TARGET_START[1],
+        skip_empty=True,
+    )
+    body_written, body_fixed, body_spanned = _apply_table_block(
+        table=table,
+        values=body_values,
+        source_range=values_range,
+        target_start_row=SLIDE24_VALUES_TARGET_START[0],
+        target_start_col=SLIDE24_VALUES_TARGET_START[1],
+        skip_empty=False,
+    )
 
     return Slide24TableApplyResult(
         found=True,
         slide_index=slide_index,
         shape_name=getattr(shape, "name", None),
-        written_cells=written_cells,
-        skipped_fixed_cells=skipped_fixed_cells,
-        skipped_spanned_cells=skipped_spanned_cells,
+        written_cells=header_written + body_written,
+        skipped_fixed_cells=header_fixed + body_fixed,
+        skipped_spanned_cells=header_spanned + body_spanned,
     )
 
 
@@ -238,7 +318,8 @@ def apply_slide24_table_file(
     xlsx_path: Path,
     table_alt_text: str = SLIDE24_TABLE_ALT_TEXT,
     sheet_name: str = SLIDE24_SHEET_NAME,
-    source_range: str = SLIDE24_SOURCE_RANGE,
+    header_range: str = SLIDE24_HEADER_RANGE,
+    values_range: str = SLIDE24_VALUES_RANGE,
     strict: bool = False,
 ) -> Slide24TableApplyResult:
     prs = Presentation(str(pptx_path))
@@ -247,7 +328,8 @@ def apply_slide24_table_file(
         xlsx_path=xlsx_path,
         table_alt_text=table_alt_text,
         sheet_name=sheet_name,
-        source_range=source_range,
+        header_range=header_range,
+        values_range=values_range,
         strict=strict,
     )
 

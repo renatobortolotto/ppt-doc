@@ -11,6 +11,7 @@ from utils.ppt_tables_slide_24 import (
     SLIDE24_TABLE_ALT_TEXT,
     apply_slide24_table_file,
     apply_slide24_table_to_presentation,
+    extract_slide24_table_headers,
     extract_slide24_table_values,
 )
 
@@ -81,21 +82,24 @@ class TestPptTablesSlide24(unittest.TestCase):
         table.cell(0, 6).merge(table.cell(0, 8))
         prs.save(pptx_path)
 
-    def test_extract_slide24_table_values_formats_expected_columns(self):
+    def test_extract_slide24_table_ranges_format_expected_columns(self):
         with tempfile.TemporaryDirectory() as td:
             xlsx_path = Path(td) / "test.xlsx"
             self._create_workbook(xlsx_path)
 
+            headers = extract_slide24_table_headers(xlsx_path=xlsx_path)
             values = extract_slide24_table_values(xlsx_path=xlsx_path)
 
-        self.assertEqual(values[0][0], "IGNORAR NO PPT")
-        self.assertEqual(values[0][1], "4T24")
-        self.assertEqual(values[2][0], "Receitas Totais")
-        self.assertEqual(values[2][1], "3.214")
-        self.assertEqual(values[2][6], "7,4")
-        self.assertEqual(values[2][7], "-2,4")
-        self.assertEqual(values[2][8], "-0,6")
-        self.assertEqual(values[7][1], "(776)")
+        self.assertEqual(headers[0][0], "IGNORAR NO PPT")
+        self.assertEqual(headers[0][1], "4T24")
+        self.assertEqual(headers[0][6], "Variação")
+        self.assertEqual(headers[1][6], "4T25/3T25")
+        self.assertEqual(values[0][0], "Receitas Totais")
+        self.assertEqual(values[0][1], "3.214")
+        self.assertEqual(values[0][6], "7,4")
+        self.assertEqual(values[0][7], "-2,4")
+        self.assertEqual(values[0][8], "-0,6")
+        self.assertEqual(values[5][1], "(776)")
 
     def test_apply_slide24_table_file_writes_values_and_preserves_style(self):
         with tempfile.TemporaryDirectory() as td:
@@ -119,11 +123,12 @@ class TestPptTablesSlide24(unittest.TestCase):
         self.assertTrue(result.found)
         self.assertEqual(result.slide_index, 1)
         self.assertEqual(result.skipped_fixed_cells, 1)
-        self.assertEqual(result.skipped_spanned_cells, 2)
+        self.assertEqual(result.skipped_spanned_cells, 0)
         self.assertEqual(table.cell(0, 0).text, "FIXED PPT")
         self.assertEqual(table.cell(0, 1).text, "4T24")
         self.assertEqual(table.cell(0, 6).text, "Variação")
         self.assertEqual(table.cell(1, 6).text, "4T25/3T25")
+        self.assertEqual(table.cell(1, 1).text, "placeholder-1-1")
         self.assertEqual(table.cell(2, 0).text, "Receitas Totais")
         self.assertEqual(table.cell(2, 1).text, "3.214")
         self.assertEqual(table.cell(2, 6).text, "7,4")

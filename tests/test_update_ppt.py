@@ -78,9 +78,16 @@ class TestUpdatePpt(unittest.TestCase):
             self.assertTrue(cnv)
             cnv[0].set("descr", SLIDE24_TABLE_ALT_TEXT)
             table = shape.table
+            table.cell(0, 0).merge(table.cell(1, 0))
+            for col_idx in range(1, 6):
+                table.cell(0, col_idx).merge(table.cell(1, col_idx))
+            table.cell(0, 6).merge(table.cell(0, 8))
             for r in range(16):
                 for c in range(9):
-                    table.cell(r, c).text = f"placeholder-{r}-{c}"
+                    cell = table.cell(r, c)
+                    if getattr(cell, "is_spanned", False):
+                        continue
+                    cell.text = f"placeholder-{r}-{c}"
             table.cell(0, 0).text = "FIXED PPT"
             run = table.cell(2, 1).text_frame.paragraphs[0].runs[0]
             run.font.size = Pt(20)
@@ -101,6 +108,8 @@ class TestUpdatePpt(unittest.TestCase):
 
         self.assertEqual(updated_table.cell(0, 0).text, "FIXED PPT")
         self.assertEqual(updated_table.cell(0, 1).text, "4T24")
+        self.assertEqual(updated_table.cell(0, 6).text, "Variação")
+        self.assertEqual(updated_table.cell(1, 6).text, "4T25/3T25")
         self.assertEqual(updated_table.cell(2, 0).text, "Receitas Totais")
         self.assertEqual(updated_table.cell(2, 1).text, "3.214")
         self.assertEqual(updated_table.cell(2, 6).text, "7,4")

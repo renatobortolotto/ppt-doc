@@ -15,7 +15,6 @@ SLIDE24_SHEET_NAME = "DRE Saida"
 SLIDE24_HEADER_RANGE = "C3:K4"
 SLIDE24_VALUES_RANGE = "C5:K18"
 SLIDE24_FIXED_COORDS = frozenset({"C3"})
-SLIDE24_HEADER_TARGET_START = (0, 0)
 SLIDE24_VALUES_TARGET_START = (2, 0)
 
 
@@ -190,6 +189,66 @@ def _find_table_shape(prs: Presentation, *, table_alt_text: str):
     return None
 
 
+def _collect_writable_target_row_cells(table, row_idx: int):
+    cells = []
+    for col_idx in range(len(table.columns)):
+        cell = table.cell(row_idx, col_idx)
+        if getattr(cell, "is_spanned", False):
+            continue
+        cells.append(cell)
+    return cells
+
+
+def _apply_header_rows(
+    *,
+    table,
+    values: list[list[str]],
+    source_range: str,
+) -> tuple[int, int, int]:
+    min_col, min_row, _max_col, _max_row = range_boundaries(source_range)
+    if len(table.rows) < len(values):
+        raise ValueError(
+            "Tabela do PowerPoint menor que o cabeçalho esperado do slide 24: "
+            f"ppt_rows={len(table.rows)} header_rows={len(values)}"
+        )
+
+    written_cells = 0
+    skipped_fixed_cells = 0
+    skipped_spanned_cells = 0
+
+    for row_offset, row_values in enumerate(values):
+        source_items: list[str] = []
+        for col_offset, rendered_value in enumerate(row_values):
+            source_coord = f"{get_column_letter(min_col + col_offset)}{min_row + row_offset}"
+            if source_coord in SLIDE24_FIXED_COORDS:
+                skipped_fixed_cells += 1
+                continue
+            if rendered_value == "":
+                continue
+            source_items.append(rendered_value)
+
+        target_cells = _collect_writable_target_row_cells(table, row_offset)
+        row_spanned = len(table.columns) - len(target_cells)
+        skipped_spanned_cells += max(0, row_spanned)
+
+        if len(target_cells) < len(source_items):
+            raise ValueError(
+                "Cabeçalho do PowerPoint tem menos células visíveis do que o esperado: "
+                f"row={row_offset} ppt_visible={len(target_cells)} source_values={len(source_items)}"
+            )
+
+        if len(target_cells) > len(source_items):
+            # Em templates corporativos, o excedente tende a ficar à esquerda
+            # por causa de células fixas/mescladas como o bloco do título.
+            target_cells = target_cells[-len(source_items):] if source_items else []
+
+        for target_cell, rendered_value in zip(target_cells, source_items):
+            _set_cell_text_preserving_style(target_cell, rendered_value)
+            written_cells += 1
+
+    return written_cells, skipped_fixed_cells, skipped_spanned_cells
+
+
 def _apply_table_block(
     *,
     table,
@@ -271,12 +330,12 @@ def apply_slide24_table_to_presentation(
     slide_index, shape = table_location
     table = shape.table
     expected_rows = max(
-        SLIDE24_HEADER_TARGET_START[0] + len(header_values),
         SLIDE24_VALUES_TARGET_START[0] + len(body_values),
+        len(header_values),
     )
     expected_cols = max(
-        SLIDE24_HEADER_TARGET_START[1] + (len(header_values[0]) if header_values else 0),
         SLIDE24_VALUES_TARGET_START[1] + (len(body_values[0]) if body_values else 0),
+        len(header_values[0]) if header_values else 0,
     )
     if len(table.rows) < expected_rows or len(table.columns) < expected_cols:
         raise ValueError(
@@ -284,13 +343,10 @@ def apply_slide24_table_to_presentation(
             f"ppt={len(table.rows)}x{len(table.columns)} range={expected_rows}x{expected_cols}"
         )
 
-    header_written, header_fixed, header_spanned = _apply_table_block(
+    header_written, header_fixed, header_spanned = _apply_header_rows(
         table=table,
         values=header_values,
         source_range=header_range,
-        target_start_row=SLIDE24_HEADER_TARGET_START[0],
-        target_start_col=SLIDE24_HEADER_TARGET_START[1],
-        skip_empty=True,
     )
     body_written, body_fixed, body_spanned = _apply_table_block(
         table=table,

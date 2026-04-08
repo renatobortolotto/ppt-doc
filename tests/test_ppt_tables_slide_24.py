@@ -70,16 +70,22 @@ class TestPptTablesSlide24(unittest.TestCase):
         self._set_alt_text(shape, SLIDE24_TABLE_ALT_TEXT)
         table = shape.table
 
+        table.cell(0, 0).merge(table.cell(1, 0))
+        for col_idx in range(1, 6):
+            table.cell(0, col_idx).merge(table.cell(1, col_idx))
+        table.cell(0, 6).merge(table.cell(0, 8))
+
         for row_idx in range(16):
             for col_idx in range(9):
-                table.cell(row_idx, col_idx).text = f"placeholder-{row_idx}-{col_idx}"
+                cell = table.cell(row_idx, col_idx)
+                if getattr(cell, "is_spanned", False):
+                    continue
+                cell.text = f"placeholder-{row_idx}-{col_idx}"
 
         table.cell(0, 0).text = "FIXED PPT"
         styled_run = table.cell(2, 1).text_frame.paragraphs[0].runs[0]
         styled_run.font.size = Pt(22)
         styled_run.font.bold = True
-
-        table.cell(0, 6).merge(table.cell(0, 8))
         prs.save(pptx_path)
 
     def test_extract_slide24_table_ranges_format_expected_columns(self):
@@ -123,12 +129,13 @@ class TestPptTablesSlide24(unittest.TestCase):
         self.assertTrue(result.found)
         self.assertEqual(result.slide_index, 1)
         self.assertEqual(result.skipped_fixed_cells, 1)
-        self.assertEqual(result.skipped_spanned_cells, 0)
+        self.assertEqual(result.skipped_spanned_cells, 8)
         self.assertEqual(table.cell(0, 0).text, "FIXED PPT")
         self.assertEqual(table.cell(0, 1).text, "4T24")
         self.assertEqual(table.cell(0, 6).text, "Variação")
         self.assertEqual(table.cell(1, 6).text, "4T25/3T25")
-        self.assertEqual(table.cell(1, 1).text, "placeholder-1-1")
+        self.assertEqual(table.cell(1, 7).text, "4T25/4T24")
+        self.assertEqual(table.cell(1, 8).text, "2025/2024")
         self.assertEqual(table.cell(2, 0).text, "Receitas Totais")
         self.assertEqual(table.cell(2, 1).text, "3.214")
         self.assertEqual(table.cell(2, 6).text, "7,4")

@@ -1,13 +1,23 @@
+import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from openpyxl import Workbook
+from PIL import Image
 from pptx import Presentation
 from pptx.util import Pt
 
-from update_ppt import _replace_text_in_shape, update_presentation
+from update_ppt import (
+    _collect_pictures_alt_text,
+    _collect_text_placeholders,
+    _flatten_text_payload,
+    _replace_text_in_shape,
+    main as update_ppt_main,
+    update_presentation,
+)
 from utils.ppt_tables_slide_24 import SLIDE24_TABLE_ALT_TEXT
 
 
@@ -44,6 +54,24 @@ class TestUpdatePpt(unittest.TestCase):
         joined = "".join(run.text for paragraph in shape.text_frame.paragraphs for run in paragraph.runs)
         self.assertEqual(replaced, 1)
         self.assertEqual(joined, "▼ 90,0%")
+
+    def test_flatten_text_payload_adds_snake_case_aliases(self):
+        mapping = _flatten_text_payload(
+            {
+                "titles": {"slide1Title": "Titulo"},
+                "subtitles": {"slide1Subtitle": "Subtitulo"},
+                "plainText": "Livre",
+                "ignored": 123,
+            }
+        )
+
+        self.assertEqual(mapping["slide1Title"], "Titulo")
+        self.assertEqual(mapping["slide1_title"], "Titulo")
+        self.assertEqual(mapping["slide1Subtitle"], "Subtitulo")
+        self.assertEqual(mapping["slide1_subtitle"], "Subtitulo")
+        self.assertEqual(mapping["plainText"], "Livre")
+        self.assertEqual(mapping["plain_text"], "Livre")
+        self.assertNotIn("ignored", mapping)
 
     def test_update_presentation_applies_slide24_table_when_xlsx_is_provided(self):
         with tempfile.TemporaryDirectory() as td:
@@ -143,6 +171,138 @@ class TestUpdatePpt(unittest.TestCase):
                 )
 
             self.assertTrue(output_path.exists())
+
+    def test_update_presentation_replaces_placeholder_text_and_tokens(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            pptx_path = tmpdir / "input.pptx"
+            output_path = tmpdir / "output.pptx"
+            image_path = tmpdir / "chart.png"
+
+            Image.new("RGB", (32, 32), color=(0, 102, 204)).save(image_path)
+
+            prs = Presentation()
+            slide = prs.slides.add_slide(prs.slide_layouts[6])
+            shape_placeholder = slide.shapes.add_textbox(0, 0, 1_000_000, 500_000)
+            shape_placeholder.text_frame.text = "chart.png"
+            shape_text = slide.shapes.add_textbox(0, 600_000, 2_000_000, 500_000)
+            shape_text.text_frame.text = "{{slide1Title}}"
+            prs.save(pptx_path)
+
+            (
+                replaced_pictures,
+                replaced_placeholders,
+                replaced_text,
+                replaced_files,
+                missing_files,
+                applied_text_keys,
+            ) = update_presentation(
+                pptx_path=pptx_path,
+                output_path=output_path,
+                images_dir=tmpdir,
+                allow_placeholder_text=True,
+                text_json=None,
+                text_payload={"titles": {"slide1Title": "Titulo Final"}},
+            )
+
+            updated = Presentation(str(output_path))
+            texts = [
+                shape.text_frame.text
+                for shape in updated.slides[0].shapes
+                if getattr(shape, "has_text_frame", False)
+            ]
+
+        self.assertEqual(replaced_pictures, 0)
+        self.assertEqual(replaced_placeholders, 1)
+        self.assertEqual(replaced_text, 1)
+        self.assertEqual(replaced_files, ["chart.png"])
+        self.assertEqual(missing_files, [])
+        self.assertIn("slide1Title", applied_text_keys)
+        self.assertIn("slide1_title", applied_text_keys)
+        self.assertIn("Titulo Final", texts)
+
+    def test_update_presentation_supports_in_place_output(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            pptx_path = tmpdir / "input.pptx"
+
+            prs = Presentation()
+            prs.slides.add_slide(prs.slide_layouts[6])
+            prs.save(pptx_path)
+
+            result = update_presentation(
+                pptx_path=pptx_path,
+                output_path=pptx_path,
+                images_dir=tmpdir,
+                allow_placeholder_text=False,
+                text_json=None,
+            )
+
+            self.assertEqual(result[:3], (0, 0, 0))
+            self.assertTrue(pptx_path.exists())
+
+    def test_collect_helpers_read_picture_alt_texts_and_text_placeholders(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            pptx_path = tmpdir / "input.pptx"
+            image_path = tmpdir / "chart.png"
+            Image.new("RGB", (24, 24), color=(10, 20, 30)).save(image_path)
+
+            prs = Presentation()
+            slide = prs.slides.add_slide(prs.slide_layouts[6])
+            picture = slide.shapes.add_picture(str(image_path), 0, 0)
+            cnv = picture._element.xpath(".//p:cNvPr")
+            self.assertTrue(cnv)
+            cnv[0].set("descr", "chart.png")
+            textbox = slide.shapes.add_textbox(0, 600_000, 1_000_000, 500_000)
+            textbox.text_frame.text = "{{slide1_title}}"
+            prs.save(pptx_path)
+
+            alts = _collect_pictures_alt_text(pptx_path)
+            texts = _collect_text_placeholders(pptx_path)
+
+        self.assertEqual(alts, ["chart.png"])
+        self.assertEqual(texts, ["{{slide1_title}}"])
+
+    def test_main_uses_default_updated_output_path(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            pptx_path = tmpdir / "input.pptx"
+            text_json_path = tmpdir / "text.json"
+
+            prs = Presentation()
+            prs.slides.add_slide(prs.slide_layouts[6])
+            prs.save(pptx_path)
+            text_json_path.write_text(
+                json.dumps({"titles": {"slide1_title": "Titulo"}}),
+                encoding="utf-8",
+            )
+
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "update_ppt.py",
+                    "--pptx",
+                    str(pptx_path),
+                    "--images-dir",
+                    str(tmpdir),
+                    "--text-json",
+                    str(text_json_path),
+                ],
+            ):
+                with patch(
+                    "update_ppt.update_presentation",
+                    return_value=(0, 0, 1, [], [], ["slide1_title"]),
+                ) as update_mock:
+                    with patch("update_ppt._collect_pictures_alt_text", return_value=[]):
+                        with patch("update_ppt._collect_text_placeholders", return_value=[]):
+                            update_ppt_main()
+
+        self.assertEqual(
+            update_mock.call_args.kwargs["output_path"],
+            pptx_path.with_name("input.updated.pptx").resolve(),
+        )
 
 
 if __name__ == "__main__":

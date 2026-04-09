@@ -2,20 +2,30 @@ import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import tempfile
+import zipfile
 
 from utils.xlsx_text_fields import TextFieldSpec
 
 from presentation_builder import (
+    BuildPresentationResult,
     ChartGenerationFailure,
     ChartGenerationResult,
     ChartGeneratorSpec,
     TextFieldExtractionResult,
     TextFieldFailure,
     build_presentation,
+    build_presentation_from_bytes,
     build_text_mapping,
     build_text_mapping_with_failures,
     generate_chart_assets,
+    inspect_xlsx_privacy,
+    load_job_config,
     load_llm_mapping_from_payload,
+    resolve_path,
+    XlsxPrivacyCheckResult,
+    _persist_generated_chart_files,
+    _select_chart_generators,
 )
 
 
@@ -156,6 +166,31 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertEqual(result.failures[0].generator_key, "bad")
         self.assertEqual(result.failures[0].output_files, ("bad1.png", "bad2.png"))
         log_mock.assert_called_once()
+
+    def test_generate_chart_assets_logs_start_and_success(self):
+        def _slide7(*, xlsx_path: Path, output_dir: Path):
+            return [output_dir / "slide7.png"]
+
+        specs = (
+            ChartGeneratorSpec(
+                key="slide7",
+                label="slide 7",
+                generator=_slide7,
+                output_files=("slide7.png",),
+            ),
+        )
+
+        with patch("presentation_builder._chart_generators", return_value=specs):
+            with patch("presentation_builder.logging.info") as info_mock:
+                result = generate_chart_assets(
+                    xlsx_path=self.repo_root / "testing.xlsx",
+                    images_dir=self.repo_root,
+                )
+
+        self.assertEqual(result.generated_files, (self.repo_root / "slide7.png",))
+        self.assertEqual(info_mock.call_count, 2)
+        self.assertIn("Iniciando geracao de graficos", info_mock.call_args_list[0].args[0])
+        self.assertIn("concluida com sucesso", info_mock.call_args_list[1].args[0])
 
     def test_generate_chart_assets_filters_requested_slides(self):
         called: list[str] = []
@@ -393,6 +428,183 @@ class TestPresentationBuilder(unittest.TestCase):
 
         self.assertEqual(result.generated_chart_count, 1)
         self.assertEqual(result.text_field_failures, text_failures)
+
+    def test_resolve_path_supports_relative_and_absolute_inputs(self):
+        relative = resolve_path(self.repo_root, "config/job_config.json")
+        absolute_input = Path("/tmp/ppt-doc-absolute.json")
+        absolute = resolve_path(self.repo_root, str(absolute_input))
+
+        self.assertEqual(relative, (self.repo_root / "config" / "job_config.json").resolve())
+        self.assertEqual(absolute, absolute_input)
+
+    def test_load_job_config_rejects_non_object_json(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo_root = Path(td)
+            config_dir = repo_root / "config"
+            config_dir.mkdir(parents=True, exist_ok=True)
+            (config_dir / "job_config.json").write_text("[]", encoding="utf-8")
+
+            with self.assertRaisesRegex(ValueError, "objeto"):
+                load_job_config(repo_root)
+
+    def test_select_chart_generators_rejects_unavailable_slides(self):
+        with self.assertRaisesRegex(ValueError, "Nenhum dos slides informados"):
+            _select_chart_generators((999,))
+
+    def test_persist_generated_chart_files_copies_into_target_dir(self):
+        with tempfile.TemporaryDirectory() as td:
+            tmpdir = Path(td)
+            source_dir = tmpdir / "source"
+            target_dir = tmpdir / "target"
+            source_dir.mkdir(parents=True, exist_ok=True)
+            target_dir.mkdir(parents=True, exist_ok=True)
+
+            generated_file = source_dir / "chart.png"
+            generated_file.write_bytes(b"png-bytes")
+
+            persisted = _persist_generated_chart_files(
+                generated_files=(generated_file,),
+                target_dir=target_dir,
+            )
+
+            self.assertEqual(persisted, (target_dir / "chart.png",))
+            self.assertEqual((target_dir / "chart.png").read_bytes(), b"png-bytes")
+
+    def test_build_presentation_rejects_only_slides_with_skip_charts(self):
+        with patch(
+            "presentation_builder._load_validated_workbook",
+        ) as load_workbook_mock:
+            load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
+
+            with self.assertRaisesRegex(ValueError, "only_slides nao pode ser usado junto com skip_charts"):
+                build_presentation(
+                    repo_root=self.repo_root,
+                    cfg=self.cfg,
+                    xlsx_path=self.repo_root / "testing.xlsx",
+                    skip_charts=True,
+                    only_slides=(8,),
+                )
+
+    def test_build_presentation_rejects_non_public_xlsx_privacy(self):
+        with patch(
+            "presentation_builder._load_validated_workbook",
+        ) as load_workbook_mock:
+            load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
+            with patch(
+                "presentation_builder.inspect_xlsx_privacy",
+                return_value=XlsxPrivacyCheckResult(
+                    status="non_public",
+                    label="Confidencial",
+                    source="custom:MSIP_Label_123_Name",
+                ),
+            ):
+                with self.assertRaisesRegex(ValueError, "privacidade diferente de publico"):
+                    build_presentation(
+                        repo_root=self.repo_root,
+                        cfg=self.cfg,
+                        xlsx_path=self.repo_root / "testing.xlsx",
+                    )
+
+    def test_build_presentation_from_bytes_rejects_empty_xlsx(self):
+        with self.assertRaisesRegex(ValueError, "XLSX vazio"):
+            build_presentation_from_bytes(
+                repo_root=self.repo_root,
+                cfg=self.cfg,
+                xlsx_bytes=b"",
+            )
+
+    def test_inspect_xlsx_privacy_detects_public_msip_label(self):
+        with tempfile.TemporaryDirectory() as td:
+            xlsx_path = Path(td) / "public.xlsx"
+            with zipfile.ZipFile(xlsx_path, "w") as zf:
+                zf.writestr(
+                    "docProps/custom.xml",
+                    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                    <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties"
+                        xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+                      <property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="MSIP_Label_123_Name">
+                        <vt:lpwstr>Público</vt:lpwstr>
+                      </property>
+                    </Properties>""",
+                )
+
+            result = inspect_xlsx_privacy(xlsx_path, self.cfg)
+
+        self.assertEqual(result.status, "public")
+        self.assertEqual(result.label, "Público")
+        self.assertEqual(result.source, "custom:MSIP_Label_123_Name")
+
+    def test_inspect_xlsx_privacy_detects_non_public_msip_label(self):
+        with tempfile.TemporaryDirectory() as td:
+            xlsx_path = Path(td) / "private.xlsx"
+            with zipfile.ZipFile(xlsx_path, "w") as zf:
+                zf.writestr(
+                    "docProps/custom.xml",
+                    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                    <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties"
+                        xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+                      <property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="MSIP_Label_123_Name">
+                        <vt:lpwstr>Confidencial</vt:lpwstr>
+                      </property>
+                    </Properties>""",
+                )
+
+            result = inspect_xlsx_privacy(xlsx_path, self.cfg)
+
+        self.assertEqual(result.status, "non_public")
+        self.assertEqual(result.label, "Confidencial")
+        self.assertEqual(result.source, "custom:MSIP_Label_123_Name")
+
+    def test_build_presentation_from_bytes_uses_api_output_filename(self):
+        cfg = dict(self.cfg)
+        cfg["api_output_filename"] = "nested/empresa-final.pptx"
+
+        def _fake_build_presentation(
+            *,
+            repo_root,
+            cfg,
+            xlsx_path,
+            llm_payload,
+            output_path,
+            images_dir,
+            skip_charts,
+        ):
+            self.assertEqual(repo_root, self.repo_root)
+            self.assertEqual(cfg["api_output_filename"], "nested/empresa-final.pptx")
+            self.assertEqual(xlsx_path.read_bytes(), b"xlsx-bytes")
+            self.assertEqual(images_dir.name, "images")
+            self.assertEqual(llm_payload, {"response": {"titles": {"slide1_title": "Titulo"}}})
+            self.assertFalse(skip_charts)
+            output_path.write_bytes(b"pptx-bytes")
+            return BuildPresentationResult(
+                output_path=output_path,
+                replaced_pictures=2,
+                replaced_placeholders=1,
+                replaced_text=3,
+                generated_chart_count=4,
+                chart_failures=(),
+                text_field_failures=(),
+                applied_text_keys=("slide1_title",),
+            )
+
+        with patch(
+            "presentation_builder.build_presentation",
+            side_effect=_fake_build_presentation,
+        ):
+            pptx_bytes, result = build_presentation_from_bytes(
+                repo_root=self.repo_root,
+                cfg=cfg,
+                xlsx_bytes=b"xlsx-bytes",
+                llm_payload={"response": {"titles": {"slide1_title": "Titulo"}}},
+            )
+
+        self.assertEqual(pptx_bytes, b"pptx-bytes")
+        self.assertEqual(result.output_path, Path("empresa-final.pptx"))
+        self.assertEqual(result.replaced_pictures, 2)
+        self.assertEqual(result.replaced_placeholders, 1)
+        self.assertEqual(result.replaced_text, 3)
+        self.assertEqual(result.generated_chart_count, 4)
+        self.assertEqual(result.applied_text_keys, ("slide1_title",))
 
 
 if __name__ == "__main__":

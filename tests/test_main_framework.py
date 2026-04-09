@@ -48,6 +48,21 @@ def _load_main_framework():
 
 
 class TestMainFramework(unittest.TestCase):
+    def test_parse_llm_payload_rejects_empty_bytes(self):
+        module = _load_main_framework()
+        with self.assertRaisesRegex(ValueError, "JSON da LLM vazio"):
+            module._parse_llm_payload(b"")
+
+    def test_parse_llm_payload_rejects_invalid_utf8(self):
+        module = _load_main_framework()
+        with self.assertRaisesRegex(ValueError, "UTF-8"):
+            module._parse_llm_payload(b"\xff")
+
+    def test_parse_llm_payload_rejects_invalid_json(self):
+        module = _load_main_framework()
+        with self.assertRaisesRegex(ValueError, "JSON da LLM invalido"):
+            module._parse_llm_payload(b"{")
+
     def test_compose_presentation_from_inputs_success(self):
         module = _load_main_framework()
         fake_build = types.SimpleNamespace(
@@ -95,6 +110,36 @@ class TestMainFramework(unittest.TestCase):
         self.assertEqual(resp["summary"]["textFieldFailures"][0]["fieldId"], "ROE_RECORRENTE")
         self.assertTrue(resp["pptxBase64"])
 
+    def test_compose_presentation_from_inputs_prefers_api_output_filename(self):
+        module = _load_main_framework()
+        fake_build = types.SimpleNamespace(
+            output_path=Path("/tmp/final.pptx"),
+            replaced_pictures=0,
+            replaced_placeholders=0,
+            replaced_text=0,
+            generated_chart_count=0,
+            chart_failures=(),
+            text_field_failures=(),
+            applied_text_keys=(),
+        )
+        with patch(
+            f"{module.__name__}.load_job_config",
+            return_value={
+                "api_output_filename": "nested/empresa.apresentacao.pptx",
+                "pptx_output": "fallback.pptx",
+            },
+        ):
+            with patch(
+                f"{module.__name__}.build_presentation_from_bytes",
+                return_value=(b"pptx-bytes", fake_build),
+            ):
+                resp = module.compose_presentation_from_inputs(
+                    b"xlsx-bytes",
+                    b'{"response":{"titles":{"slide1_title":"Titulo"}}}',
+                )
+
+        self.assertEqual(resp["filename"], "empresa.apresentacao.pptx")
+
     def test_compose_presentation_files_invalid_json(self):
         module = _load_main_framework()
         resp = module.compose_presentation(
@@ -122,6 +167,24 @@ class TestMainFramework(unittest.TestCase):
 
         self.assertEqual(resp["filename"], "main_testing.pptx")
         compose_mock.assert_called_once_with(b"xlsx", b'{"response":{}}')
+
+    def test_compose_presentation_files_wraps_runtime_failures(self):
+        module = _load_main_framework()
+        with patch.object(
+            module,
+            "compose_presentation_from_inputs",
+            side_effect=RuntimeError("boom"),
+        ):
+            resp = module.compose_presentation_files(
+                DummyFileInput(b"xlsx"),
+                DummyFileInput(b'{"response":{}}'),
+            )
+
+        self.assertEqual(
+            resp["error"],
+            "Falha ao montar o PowerPoint a partir do XLSX e do JSON da LLM.",
+        )
+        self.assertEqual(resp["details"], "boom")
 
 
 if __name__ == "__main__":

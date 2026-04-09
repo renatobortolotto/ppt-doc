@@ -20,6 +20,11 @@ e devolve o `.pptx` final.
 - `utils/`: geradores de graficos e extracao de campos do Excel
 - `CHART_STYLE_GUIDE.md`: guia curto com estilizações aprovadas para reutilizar em ajustes visuais
 
+O builder tambem faz uma verificacao best-effort da classificacao/privacidade do `.xlsx` olhando metadados OOXML como `docProps/custom.xml` e labels estilo `MSIP_Label_*`. Se encontrar uma classificacao explicita diferente de `Publico`, o job falha por padrao. As chaves de controle ficam em `config/job_config.json`:
+
+- `xlsx_privacy_check_mode`: `error`, `warn` ou `off`
+- `xlsx_privacy_public_values`: lista de labels aceitos como publicos
+
 Nos campos de texto vindos do Excel, voce tambem pode usar `div` para dividir o valor antes de converter para string, `round` para definir quantas casas decimais o texto deve ter, `is_porc` para preservar a exibicao percentual do Excel (por exemplo `9,9%` em vez de `0.099`) e `is_pp` para forcar a leitura numerica pura de celulas com formato customizado em `p.p.`, deixando `round` e `VAR_` funcionarem em cima do valor bruto. Exemplo:
 
 ```json

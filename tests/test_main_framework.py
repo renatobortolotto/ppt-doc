@@ -73,9 +73,9 @@ class TestMainFramework(unittest.TestCase):
             generated_chart_count=11,
             chart_failures=(
                 ChartGenerationFailure(
-                    generator_key="slide7",
-                    label="slide 7",
-                    output_files=("01_lucro_trimestres.png",),
+                    generator_key="slide4",
+                    label="slide 4",
+                    output_files=("10_pizza_carteira.png",),
                     error="Valor nao numerico",
                 ),
             ),
@@ -105,7 +105,7 @@ class TestMainFramework(unittest.TestCase):
         self.assertEqual(resp["filename"], "main_testing.pptx")
         self.assertEqual(resp["summary"]["replacedPictures"], 3)
         self.assertEqual(resp["summary"]["chartFailureCount"], 1)
-        self.assertEqual(resp["summary"]["chartFailures"][0]["generatorKey"], "slide7")
+        self.assertEqual(resp["summary"]["chartFailures"][0]["generatorKey"], "slide4")
         self.assertEqual(resp["summary"]["textFieldFailureCount"], 1)
         self.assertEqual(resp["summary"]["textFieldFailures"][0]["fieldId"], "ROE_RECORRENTE")
         self.assertTrue(resp["pptxBase64"])

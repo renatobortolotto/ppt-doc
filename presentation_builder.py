@@ -18,13 +18,10 @@ from utils.slide13_charts import generate_slide13_charts
 from utils.slide14_charts import generate_slide14_charts
 from utils.slide15_charts import generate_slide15_charts
 from utils.slide16_charts import generate_slide16_charts
-from utils.slide19_charts import generate_slide19_charts
-from utils.slide10_charts import generate_slide10_charts
 from utils.slide20_charts import generate_slide20_charts
 from utils.slide21_charts import generate_slide21_charts
 from utils.slide22_charts import generate_slide22_charts
-from utils.slide7_charts import generate_slide7_charts
-from utils.slide3_charts import generate_slide3_charts
+from utils.slide19_charts import generate_slide19_charts
 from utils.slide8_charts import generate_slide8_charts
 from utils.slide9_charts import generate_slide9_charts
 from utils.slide4_charts import generate_slide4_charts
@@ -197,36 +194,6 @@ def build_text_mapping_with_failures(
 
 def _chart_generators() -> Sequence[ChartGeneratorSpec]:
     return (
-        ChartGeneratorSpec(
-            key="slide7",
-            label="slide 7",
-            generator=generate_slide7_charts,
-            output_files=(
-                "01_lucro_trimestres.png",
-                "02_lucro_9m.png",
-                "03_roe_trimestres.png",
-                "04_roe_9m.png",
-            ),
-        ),
-        ChartGeneratorSpec(
-            key="slide10",
-            label="slide 10",
-            generator=generate_slide10_charts,
-            output_files=(
-                "05_qualidade_varejo_veiculos.png",
-                "06_qualidade_total.png",
-                "07_qualidade_atacado.png",
-            ),
-        ),
-        ChartGeneratorSpec(
-            key="slide3",
-            label="slide 3",
-            generator=generate_slide3_charts,
-            output_files=(
-                "08_emprestimos_empilhado.png",
-                "09_seguros_cartoes_total.png",
-            ),
-        ),
         ChartGeneratorSpec(
             key="slide4",
             label="slide 4",

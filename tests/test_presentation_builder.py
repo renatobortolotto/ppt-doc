@@ -24,6 +24,7 @@ from presentation_builder import (
     load_llm_mapping_from_payload,
     resolve_path,
     XlsxPrivacyCheckResult,
+    _chart_generators,
     _persist_generated_chart_files,
     _select_chart_generators,
 )
@@ -168,15 +169,15 @@ class TestPresentationBuilder(unittest.TestCase):
         log_mock.assert_called_once()
 
     def test_generate_chart_assets_logs_start_and_success(self):
-        def _slide7(*, xlsx_path: Path, output_dir: Path):
-            return [output_dir / "slide7.png"]
+        def _slide4(*, xlsx_path: Path, output_dir: Path):
+            return [output_dir / "slide4.png"]
 
         specs = (
             ChartGeneratorSpec(
-                key="slide7",
-                label="slide 7",
-                generator=_slide7,
-                output_files=("slide7.png",),
+                key="slide4",
+                label="slide 4",
+                generator=_slide4,
+                output_files=("slide4.png",),
             ),
         )
 
@@ -187,17 +188,26 @@ class TestPresentationBuilder(unittest.TestCase):
                     images_dir=self.repo_root,
                 )
 
-        self.assertEqual(result.generated_files, (self.repo_root / "slide7.png",))
+        self.assertEqual(result.generated_files, (self.repo_root / "slide4.png",))
         self.assertEqual(info_mock.call_count, 2)
         self.assertIn("Iniciando geracao de graficos", info_mock.call_args_list[0].args[0])
         self.assertIn("concluida com sucesso", info_mock.call_args_list[1].args[0])
 
+    def test_chart_generators_exclude_slides_3_7_and_10_from_flow(self):
+        generator_keys = {spec.key for spec in _chart_generators()}
+
+        self.assertNotIn("slide3", generator_keys)
+        self.assertNotIn("slide7", generator_keys)
+        self.assertNotIn("slide10", generator_keys)
+        self.assertIn("slide4", generator_keys)
+        self.assertIn("slide8", generator_keys)
+
     def test_generate_chart_assets_filters_requested_slides(self):
         called: list[str] = []
 
-        def _slide7(*, xlsx_path: Path, output_dir: Path):
-            called.append("slide7")
-            return [output_dir / "slide7.png"]
+        def _slide4(*, xlsx_path: Path, output_dir: Path):
+            called.append("slide4")
+            return [output_dir / "slide4.png"]
 
         def _slide8(*, xlsx_path: Path, output_dir: Path):
             called.append("slide8")
@@ -209,10 +219,10 @@ class TestPresentationBuilder(unittest.TestCase):
 
         specs = (
             ChartGeneratorSpec(
-                key="slide7",
-                label="slide 7",
-                generator=_slide7,
-                output_files=("slide7.png",),
+                key="slide4",
+                label="slide 4",
+                generator=_slide4,
+                output_files=("slide4.png",),
             ),
             ChartGeneratorSpec(
                 key="slide8",
@@ -232,22 +242,26 @@ class TestPresentationBuilder(unittest.TestCase):
             result = generate_chart_assets(
                 xlsx_path=self.repo_root / "testing.xlsx",
                 images_dir=self.repo_root,
-                only_slides=(1, 8, 10),
+                only_slides=(4, 8, 10),
             )
 
-        self.assertEqual(called, ["slide8", "slide10"])
+        self.assertEqual(called, ["slide4", "slide8", "slide10"])
         self.assertEqual(
             result.generated_files,
-            (self.repo_root / "slide8.png", self.repo_root / "slide10.png"),
+            (
+                self.repo_root / "slide4.png",
+                self.repo_root / "slide8.png",
+                self.repo_root / "slide10.png",
+            ),
         )
 
     def test_build_presentation_keeps_running_when_some_charts_fail(self):
         fake_result = (3, 0, 2, [], [], ["slide1_title"])
         chart_failures = (
             ChartGenerationFailure(
-                generator_key="slide7",
-                label="slide 7",
-                output_files=("01_lucro_trimestres.png", "02_lucro_9m.png"),
+                generator_key="slide4",
+                label="slide 4",
+                output_files=("10_pizza_carteira.png", "11_pizza_trimestres.png"),
                 error="Valor nao numerico",
             ),
         )
@@ -450,6 +464,10 @@ class TestPresentationBuilder(unittest.TestCase):
     def test_select_chart_generators_rejects_unavailable_slides(self):
         with self.assertRaisesRegex(ValueError, "Nenhum dos slides informados"):
             _select_chart_generators((999,))
+
+    def test_select_chart_generators_rejects_removed_slides_3_7_and_10(self):
+        with self.assertRaisesRegex(ValueError, "Nenhum dos slides informados"):
+            _select_chart_generators((3, 7, 10))
 
     def test_persist_generated_chart_files_copies_into_target_dir(self):
         with tempfile.TemporaryDirectory() as td:

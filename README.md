@@ -20,6 +20,8 @@ e devolve o `.pptx` final.
 - `utils/`: geradores de graficos e extracao de campos do Excel
 - `CHART_STYLE_GUIDE.md`: guia curto com estilizações aprovadas para reutilizar em ajustes visuais
 
+No fluxo corporativo atual, os geradores dos slides `3`, `7` e `10` estao desativados no builder principal. O `slide7_charts.py` tambem foi removido do workspace, e os modulos `3` e `10` continuam no repo apenas para referencia/manutencao, sem entrar mais na geracao automatica do PPT.
+
 O builder tambem faz uma verificacao best-effort da classificacao/privacidade do `.xlsx` olhando metadados OOXML como `docProps/custom.xml` e labels estilo `MSIP_Label_*`. Se encontrar uma classificacao explicita diferente de `Publico`, o job falha por padrao. As chaves de controle ficam em `config/job_config.json`:
 
 - `xlsx_privacy_check_mode`: `error`, `warn` ou `off`
@@ -87,7 +89,7 @@ cd /home/renato/projetos/double-projects/ppt-doc
 MPLCONFIGDIR=/tmp/matplotlib ./.venv/bin/python run_fixed_job.py --xlsx /caminho/para/arquivo.xlsx
 ```
 
-Para testar apenas os graficos de alguns slides, use `--only-slides`. Ele aceita lista e intervalo, como `3,4,7,8` ou `1-8`:
+Para testar apenas os graficos de alguns slides, use `--only-slides`. Ele aceita lista e intervalo, como `4,8,11,12` ou `1-8`:
 
 ```bash
 cd /home/renato/projetos/double-projects/ppt-doc

@@ -48,7 +48,7 @@ class TestRunFixedJob(unittest.TestCase):
                     "--llm-json",
                     str(llm_json_path),
                     "--only-slides",
-                    "7-8",
+                    "8-9",
                 ],
             ):
                 with patch("run_fixed_job._configure_logging") as configure_mock:
@@ -67,7 +67,7 @@ class TestRunFixedJob(unittest.TestCase):
         self.assertEqual(build_kwargs["cfg"], {"pptx_output": "main_testing.pptx"})
         self.assertEqual(build_kwargs["xlsx_path"], xlsx_path.resolve())
         self.assertEqual(build_kwargs["llm_payload"], llm_payload)
-        self.assertEqual(build_kwargs["only_slides"], (7, 8))
+        self.assertEqual(build_kwargs["only_slides"], (8, 9))
         self.assertFalse(build_kwargs["skip_charts"])
 
     def test_main_logs_chart_and_text_failures(self):
@@ -83,9 +83,9 @@ class TestRunFixedJob(unittest.TestCase):
                 generated_chart_count=4,
                 chart_failures=(
                     ChartGenerationFailure(
-                        generator_key="slide7",
-                        label="slide 7",
-                        output_files=("01_lucro_trimestres.png",),
+                        generator_key="slide4",
+                        label="slide 4",
+                        output_files=("10_pizza_carteira.png",),
                         error="valor invalido",
                     ),
                 ),

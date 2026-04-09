@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from openpyxl import Workbook
 
-from utils.slide12_charts import generate_slide12_charts
+from utils.slides.slide12_charts import generate_slide12_charts
 
 
 class TestSlide12Charts(unittest.TestCase):
@@ -51,7 +51,7 @@ class TestSlide12Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slide12_charts._plot_slide12_stacked", side_effect=_capture_plot):
+            with patch("utils.slides.slide12_charts._plot_slide12_stacked", side_effect=_capture_plot):
                 files = generate_slide12_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual([path.name for path in files], ["12_slide12_composicao.png"])

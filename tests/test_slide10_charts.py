@@ -4,8 +4,7 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from utils.slide10_charts import _find_title_index, _pick_remaining, _sanitize_filename, generate_slide10_charts
-from utils.slide2_charts import generate_slide2_charts
+from utils.slides.slide10_charts import _find_title_index, _pick_remaining, _sanitize_filename, generate_slide10_charts
 
 
 class TestSlide10Charts(unittest.TestCase):
@@ -13,9 +12,6 @@ class TestSlide10Charts(unittest.TestCase):
         self.assertEqual(_sanitize_filename("Serie A/B"), "Serie_AB")
         self.assertEqual(_find_title_index(["Varejo", "Atacado"], "atacad"), 1)
         self.assertEqual(_pick_remaining([1, 3], 5), [0, 2, 4])
-
-    def test_legacy_slide2_alias_points_to_slide10_generator(self):
-        self.assertIs(generate_slide2_charts, generate_slide10_charts)
 
     def test_generate_slide10_charts_creates_expected_pngs(self):
         wb = Workbook()

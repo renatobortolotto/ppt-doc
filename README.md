@@ -17,10 +17,11 @@ e devolve o `.pptx` final.
 - `update_ppt.py`: atualiza o template PPT trocando imagens e preenchendo textos
 - `config/job_config.json`: template, saida, diretorio de imagens e JSON padrao da LLM
 - `config/text_fields.json`: mapeamento `TOKEN -> celula A1` e chaves que devem vir do JSON da LLM
-- `utils/`: geradores de graficos e extracao de campos do Excel
+- `utils/slides/`: geradores de graficos organizados por slide
+- `utils/`: extracao de campos do Excel e utilitarios compartilhados
 - `CHART_STYLE_GUIDE.md`: guia curto com estilizações aprovadas para reutilizar em ajustes visuais
 
-No fluxo corporativo atual, os geradores dos slides `3`, `7` e `10` estao desativados no builder principal. O `slide7_charts.py` tambem foi removido do workspace, e os modulos `3` e `10` continuam no repo apenas para referencia/manutencao, sem entrar mais na geracao automatica do PPT.
+No fluxo corporativo atual, os geradores dos slides `3`, `7` e `10` estao desativados no builder principal. O `slide7_charts.py` tambem foi removido do workspace, e os modulos `3` e `10` continuam no repo apenas para referencia/manutencao, sem entrar mais na geracao automatica do PPT. Os geradores ativos ficam em `utils/slides/`.
 
 O builder tambem faz uma verificacao best-effort da classificacao/privacidade do `.xlsx` olhando metadados OOXML como `docProps/custom.xml` e labels estilo `MSIP_Label_*`. Se encontrar uma classificacao explicita diferente de `Publico`, o job falha por padrao. As chaves de controle ficam em `config/job_config.json`:
 

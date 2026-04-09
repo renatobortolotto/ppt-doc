@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 from openpyxl import Workbook
 
-from utils.slide21_charts import (
+from utils.slides.slide21_charts import (
     SLIDE21_COMPARATIVE_OUTPUT,
     SLIDE21_STACKED_OUTPUT,
     _fmt_comparative_value,
@@ -75,8 +75,8 @@ class TestSlide21Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slide21_charts._plot_stacked_atacado", side_effect=_capture_stacked):
-                with patch("utils.slide21_charts._plot_comparative_bars", side_effect=_capture_comparative):
+            with patch("utils.slides.slide21_charts._plot_stacked_atacado", side_effect=_capture_stacked):
+                with patch("utils.slides.slide21_charts._plot_comparative_bars", side_effect=_capture_comparative):
                     files = generate_slide21_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual([path.name for path in files], [SLIDE21_STACKED_OUTPUT, SLIDE21_COMPARATIVE_OUTPUT])

@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 from openpyxl import Workbook
 
-from utils.slide20_charts import (
+from utils.slides.slide20_charts import (
     SLIDE20_EMPRESTIMOS_OUTPUT,
     SLIDE20_SEGUROS_OUTPUT,
     generate_slide20_charts,
@@ -56,8 +56,8 @@ class TestSlide20Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slide20_charts._plot_stacked_bars", side_effect=_capture_stacked):
-                with patch("utils.slide20_charts._plot_simple_bars", side_effect=_capture_simple):
+            with patch("utils.slides.slide20_charts._plot_stacked_bars", side_effect=_capture_stacked):
+                with patch("utils.slides.slide20_charts._plot_simple_bars", side_effect=_capture_simple):
                     files = generate_slide20_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual([path.name for path in files], [SLIDE20_EMPRESTIMOS_OUTPUT, SLIDE20_SEGUROS_OUTPUT])

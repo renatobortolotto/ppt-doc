@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 from openpyxl import Workbook
 
-from utils.slide22_charts import (
+from utils.slides.slide22_charts import (
     SLIDE22_CHARTS,
     SLIDE22_COBERTURA_REESTRUTURADA_LINE_CHART,
     SLIDE22_LINE_CHARTS,
@@ -136,9 +136,9 @@ class TestSlide22Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slide22_charts._plot_stacked_pct_block", side_effect=_capture_plot):
-                with patch("utils.slide22_charts._plot_two_point_lines", side_effect=_capture_line_plot):
-                    with patch("utils.slide22_charts._plot_two_bar_values", side_effect=_capture_bar_plot):
+            with patch("utils.slides.slide22_charts._plot_stacked_pct_block", side_effect=_capture_plot):
+                with patch("utils.slides.slide22_charts._plot_two_point_lines", side_effect=_capture_line_plot):
+                    with patch("utils.slides.slide22_charts._plot_two_bar_values", side_effect=_capture_bar_plot):
                         files = generate_slide22_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual(

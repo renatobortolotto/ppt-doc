@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 from openpyxl import Workbook
 
-from utils.slide13_charts import (
+from utils.slides.slide13_charts import (
     _fmt_num,
     _share_label_indices,
     _stack_order_for_bar,
@@ -93,7 +93,7 @@ class TestSlide13Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slide13_charts._plot_slide13_breakdown", side_effect=_capture_plot):
+            with patch("utils.slides.slide13_charts._plot_slide13_breakdown", side_effect=_capture_plot):
                 files = generate_slide13_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual(

@@ -4,8 +4,7 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from utils.slide4_charts import _extract_slide4_donut_series, generate_slide4_charts
-from utils.slide_pizza_charts import generate_pizza_charts
+from utils.slides.slide4_charts import _extract_slide4_donut_series, generate_slide4_charts
 
 
 class TestSlide4Charts(unittest.TestCase):
@@ -174,10 +173,6 @@ class TestSlide4Charts(unittest.TestCase):
             for file_path in files:
                 self.assertTrue(file_path.exists())
                 self.assertGreater(file_path.stat().st_size, 0)
-
-    def test_legacy_generate_pizza_alias_points_to_slide4_generator(self):
-        self.assertIs(generate_pizza_charts, generate_slide4_charts)
-
 
 if __name__ == "__main__":
     unittest.main()

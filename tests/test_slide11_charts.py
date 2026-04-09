@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from openpyxl import Workbook
 
-from utils.slide11_charts import (
+from utils.slides.slide11_charts import (
     _normalize_expense_values,
     _read_named_series_rows,
     _wrap_words,
@@ -91,8 +91,8 @@ class TestSlide11Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slide11_charts._plot_stacked_expenses", side_effect=_capture_stacked):
-                with patch("utils.slide11_charts._plot_efficiency_index", side_effect=_capture_index):
+            with patch("utils.slides.slide11_charts._plot_stacked_expenses", side_effect=_capture_stacked):
+                with patch("utils.slides.slide11_charts._plot_efficiency_index", side_effect=_capture_index):
                     files = generate_slide11_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual(len(files), 3)
@@ -176,8 +176,8 @@ class TestSlide11Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slide11_charts._plot_stacked_expenses", side_effect=_capture_stacked):
-                with patch("utils.slide11_charts._plot_efficiency_index", side_effect=_capture_index):
+            with patch("utils.slides.slide11_charts._plot_stacked_expenses", side_effect=_capture_stacked):
+                with patch("utils.slides.slide11_charts._plot_efficiency_index", side_effect=_capture_index):
                     generate_slide11_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual(

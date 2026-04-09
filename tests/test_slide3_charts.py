@@ -4,7 +4,7 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from utils.slide3_charts import _combine_consignado_demais, generate_slide3_charts
+from utils.slides.slide3_charts import _combine_consignado_demais, generate_slide3_charts
 
 
 class TestSlide3Charts(unittest.TestCase):

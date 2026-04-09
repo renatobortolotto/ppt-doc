@@ -4,17 +4,17 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from utils.slide9_charts import generate_slide9_charts
-from utils.slide11_charts import generate_slide11_charts
-from utils.slide12_charts import generate_slide12_charts
-from utils.slide13_charts import generate_slide13_charts
-from utils.slide14_charts import generate_slide14_charts
-from utils.slide15_charts import generate_slide15_charts
-from utils.slide16_charts import generate_slide16_charts
-from utils.slide19_charts import generate_slide19_charts
-from utils.slide20_charts import generate_slide20_charts
-from utils.slide21_charts import generate_slide21_charts
-from utils.slide22_charts import generate_slide22_charts
+from utils.slides.slide9_charts import generate_slide9_charts
+from utils.slides.slide11_charts import generate_slide11_charts
+from utils.slides.slide12_charts import generate_slide12_charts
+from utils.slides.slide13_charts import generate_slide13_charts
+from utils.slides.slide14_charts import generate_slide14_charts
+from utils.slides.slide15_charts import generate_slide15_charts
+from utils.slides.slide16_charts import generate_slide16_charts
+from utils.slides.slide19_charts import generate_slide19_charts
+from utils.slides.slide20_charts import generate_slide20_charts
+from utils.slides.slide21_charts import generate_slide21_charts
+from utils.slides.slide22_charts import generate_slide22_charts
 
 
 class TestSlideGenerationIntegrations(unittest.TestCase):

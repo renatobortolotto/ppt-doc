@@ -1,0 +1,112 @@
+openapi: 3.0.1
+info:
+  title: Chassi Python - Atlante
+  description: API para construção de apresentações em PowerPoint
+  version: "1.0.0"
+servers:
+  - description: Local Base
+    url: http://localhost:8080
+  - description: Local 
+    url: http://localhost:8080/api
+tags:
+  - name: atomic
+    description: Chassi Python - Atlante
+  - name: build-pptx
+    description: Operações para construção de apresentações completas
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+paths: 
+  /health:
+    get:
+      security: 
+        - bearerAuth: []
+      tags:
+        - atomic
+      summary: Service Metrics From Prom-Client
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: string
+  /build-pptx:
+    post:
+      security:
+        - bearerAuth: []
+      tags:
+        - build-pptx
+      summary: Endpoint para construção de apresentações em PowerPoint
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - xlsx_file
+                - llm_response_file
+              properties:
+                xlsx_file:
+                  type: string
+                  format: binary
+                  description: Arquivo XLSX contendo os dados para construção da apresentação
+                llm_response_file:
+                  type: string
+                  format: binary
+                  description: Arquivo JSON com a resposta da LLM
+          application/json:
+            schema:
+              type: object
+              required:
+                - xlsxBase64
+                - llmResponseBase64
+              properties:
+                xlsxBase64:
+                  type: string
+                  description: Arquivo XLSX em base64
+                llmResponseBase64:
+                  type: string
+                  description: JSON da LLM em base64
+      responses:
+        "200":
+          description: Apresentação construída com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  filename:
+                    type: string
+                  contentType:
+                    type: string
+                  pptxBase64:
+                    type: string
+                  summary:
+                    type: object
+        "400":
+          description: Bad Request - Dados de entrada inválidos
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: string
+        "500":
+          description: Internal Server Error - Erro ao processar a construção da apresentação
+          content:    
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  details:
+                    type: string

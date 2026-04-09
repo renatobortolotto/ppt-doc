@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from openpyxl import Workbook
 
-from utils.slides.slide16_charts import (
+from src.utils.slides.slide16_charts import (
     SLIDE16_OUTPUT,
     generate_slide16_charts,
 )
@@ -43,7 +43,7 @@ class TestSlide16Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slides.slide16_charts._plot_stacked_basileia", side_effect=_capture_plot):
+            with patch("src.utils.slides.slide16_charts._plot_stacked_basileia", side_effect=_capture_plot):
                 files = generate_slide16_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual([path.name for path in files], [SLIDE16_OUTPUT])

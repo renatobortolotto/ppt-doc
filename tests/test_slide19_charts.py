@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 from openpyxl import Workbook
 
-from utils.slides.slide19_charts import (
+from src.utils.slides.slide19_charts import (
     SLIDE19_SEGUROS_ANOS_OUTPUT,
     SLIDE19_SEGUROS_TRIMESTRES_OUTPUT,
     SLIDE19_VEICULOS_OUTPUT,
@@ -76,8 +76,8 @@ class TestSlide19Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slides.slide19_charts._plot_stacked_veiculos", side_effect=_capture_plot):
-                with patch("utils.slides.slide19_charts._plot_simple_bars", side_effect=_capture_simple):
+            with patch("src.utils.slides.slide19_charts._plot_stacked_veiculos", side_effect=_capture_plot):
+                with patch("src.utils.slides.slide19_charts._plot_simple_bars", side_effect=_capture_simple):
                     files = generate_slide19_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual(

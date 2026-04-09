@@ -1,12 +1,12 @@
 import importlib
 import unittest
 
-import utils
+import src.utils as utils
 
 
 class TestSlidePackageStructure(unittest.TestCase):
     def test_slide_modules_live_under_new_package(self):
-        module = importlib.import_module("utils.slides.slide4_charts")
+        module = importlib.import_module("src.utils.slides.slide4_charts")
 
         self.assertTrue(hasattr(module, "generate_slide4_charts"))
 

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from openpyxl import Workbook
 
-from utils.slides.slide14_charts import (
+from src.utils.slides.slide14_charts import (
     _fmt_pct_trunc,
     _largest_segment_indices,
     _normalize_percent_values,
@@ -77,8 +77,8 @@ class TestSlide14Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slides.slide14_charts._plot_stacked_veiculos", side_effect=_capture_stacked):
-                with patch("utils.slides.slide14_charts._plot_percent_bars", side_effect=_capture_percent):
+            with patch("src.utils.slides.slide14_charts._plot_stacked_veiculos", side_effect=_capture_stacked):
+                with patch("src.utils.slides.slide14_charts._plot_percent_bars", side_effect=_capture_percent):
                     files = generate_slide14_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual(

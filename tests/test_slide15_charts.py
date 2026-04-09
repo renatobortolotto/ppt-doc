@@ -7,7 +7,7 @@ from openpyxl import Workbook
 
 import numpy as np
 
-from utils.slides.slide15_charts import (
+from src.utils.slides.slide15_charts import (
     SLIDE15_OUTPUT,
     _should_render_zero_label,
     _top_share_indices,
@@ -57,7 +57,7 @@ class TestSlide15Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slides.slide15_charts._plot_stacked_captacoes", side_effect=_capture_plot):
+            with patch("src.utils.slides.slide15_charts._plot_stacked_captacoes", side_effect=_capture_plot):
                 files = generate_slide15_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual([path.name for path in files], [SLIDE15_OUTPUT])

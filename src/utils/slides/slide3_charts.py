@@ -6,7 +6,7 @@ import numpy as np
 from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
-from utils.charts_common import ExcelBarChartSpec, close_figure, to_float_list, plot_bar_from_excel
+from src.utils.charts_common import ExcelBarChartSpec, close_figure, to_float_list, plot_bar_from_excel
 
 
 def _read_range_row(ws, cell_range: str) -> list[object]:

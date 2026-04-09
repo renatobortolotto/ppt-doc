@@ -13,7 +13,7 @@ from PIL import Image
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.shapes import MSO_SHAPE_TYPE
-from utils.ppt_tables_slide_24 import apply_slide24_table_to_presentation
+from src.utils.ppt_tables_slide_24 import apply_slide24_table_to_presentation
 
 
 def _replace_shape_with_picture(slide, shape, image_path: Path) -> None:

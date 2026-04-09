@@ -4,7 +4,7 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from utils.slides.slide4_charts import _extract_slide4_donut_series, generate_slide4_charts
+from src.utils.slides.slide4_charts import _extract_slide4_donut_series, generate_slide4_charts
 
 
 class TestSlide4Charts(unittest.TestCase):

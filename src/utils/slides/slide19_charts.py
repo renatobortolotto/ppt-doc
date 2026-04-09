@@ -6,27 +6,28 @@ import numpy as np
 from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
-from utils.charts_common import close_figure
+from src.utils.charts_common import close_figure
 
 
-SLIDE20_EMPRESTIMOS_OUTPUT = "20_emprestimos_empilhado.png"
-SLIDE20_SEGUROS_OUTPUT = "20_seguros_cartoes_trimestres.png"
-SLIDE20_EMPRESTIMOS_SHEET_CANDIDATES = ("Empréstimos", "Emprestimos")
-SLIDE20_SEGUROS_SHEET_CANDIDATES = ("Seguros e Cartões", "Seguros e Cartoes")
-SLIDE20_STACKED_SERIES = (
-    ("EGV", "#123A7A"),
-    ("Placas Solares", "#5B8FF9"),
-    ("Outros", "#AFC8F5"),
+SLIDE19_VEICULOS_OUTPUT = "19_veiculos_empilhado.png"
+SLIDE19_SEGUROS_TRIMESTRES_OUTPUT = "19_seguros_cartoes_trimestres.png"
+SLIDE19_SEGUROS_ANOS_OUTPUT = "19_seguros_cartoes_anos.png"
+SLIDE19_SHEET_CANDIDATES = ("Veículos", "Veiculos")
+SLIDE19_SEGUROS_SHEET_CANDIDATES = ("Seguros e Cartões", "Seguros e Cartoes")
+SLIDE19_SERIES = (
+    ("Leves Usados", "#123A7A"),
+    ("Outros Veículos", "#8FB0E8"),
 )
-SLIDE20_STACKED_FIGSIZE = (7.4, 3.5)
-SLIDE20_STACKED_BAR_SLOT = 1.0
-SLIDE20_STACKED_BAR_WIDTH = 0.66
-SLIDE20_STACKED_FONT_SCALE = 1.4
-SLIDE20_SIMPLE_BAR_COLOR = "#123A7A"
-SLIDE20_SIMPLE_FIGSIZE = (6.5, 3.1)
-SLIDE20_SIMPLE_BAR_WIDTH = 0.62
-SLIDE20_SIMPLE_BAR_SLOT = 1.0
-SLIDE20_SIMPLE_FONT_SCALE = 1.4
+SLIDE19_FIGSIZE = (7.4, 3.5)
+SLIDE19_BAR_SLOT = 1.0
+SLIDE19_BAR_WIDTH = 0.66
+SLIDE19_STACKED_FONT_SCALE = 1.5
+SLIDE19_SIMPLE_BAR_COLOR = "#123A7A"
+SLIDE19_SIMPLE_FONT_SCALE = 1.5
+SLIDE19_SIMPLE_BAR_WIDTH = 0.62
+SLIDE19_SIMPLE_BAR_SLOT = 1.0
+SLIDE19_SIMPLE_ANOS_BAR_WIDTH = 0.22
+SLIDE19_SIMPLE_ANOS_BAR_SLOT = 0.38
 
 
 def _read_range_row(ws, cell_range: str) -> list[object]:
@@ -57,12 +58,19 @@ def _to_float_or_nan(v: object) -> float:
         return float("nan")
 
 
-def _fmt_dec(v: float, decimals: int = 1) -> str:
-    return f"{float(v):,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+def _fmt_value(v: float) -> str:
+    return f"{float(v):.1f}".replace(".", ",")
 
 
-def _fmt_k(v: float) -> str:
-    return _fmt_dec(v, 1)
+def _fmt_value_auto(v: float) -> str:
+    value = float(v)
+    if abs(value - round(value)) < 1e-9:
+        return f"{int(round(value))}"
+    return _fmt_value(value)
+
+
+def _fmt_share_pct(v: float) -> str:
+    return f"{float(v):.0f}%".replace(".", ",")
 
 
 def _fmt_bracket_pct(curr: float, prev: float) -> str:
@@ -75,20 +83,41 @@ def _text_color_for_bg_rgba(rgba) -> str:
     return "#ffffff" if lum < 0.50 else "#2f2f2f"
 
 
-def _resolve_sheet_name(wb, candidates: tuple[str, ...], label: str) -> str:
-    for candidate in candidates:
+def _resolve_veiculos_sheet_name(wb) -> str:
+    for candidate in SLIDE19_SHEET_CANDIDATES:
         if candidate in wb.sheetnames:
             return candidate
-    raise ValueError(f"Aba não encontrada: {label!r}. Disponíveis: {wb.sheetnames}")
+    raise ValueError(f"Aba não encontrada: 'Veículos'. Disponíveis: {wb.sheetnames}")
 
 
-def _plot_stacked_bars(
+def _resolve_seguros_sheet_name(wb) -> str:
+    for candidate in SLIDE19_SEGUROS_SHEET_CANDIDATES:
+        if candidate in wb.sheetnames:
+            return candidate
+    raise ValueError(f"Aba não encontrada: 'Seguros e Cartões'. Disponíveis: {wb.sheetnames}")
+
+
+def _major_series_indices(values: np.ndarray) -> tuple[int, ...]:
+    result: list[int] = []
+    for row in np.asarray(values, dtype=float):
+        valid = [
+            (idx, float(value))
+            for idx, value in enumerate(row)
+            if np.isfinite(float(value))
+        ]
+        if not valid:
+            result.append(-1)
+            continue
+        result.append(max(valid, key=lambda item: (item[1], -item[0]))[0])
+    return tuple(result)
+
+
+def _plot_stacked_veiculos(
     *,
     xlabels: list[str],
     series_names: list[str],
     values: np.ndarray,  # [n_bars, n_series]
     output_path: Path,
-    colors: list[str],
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import to_rgba
@@ -97,15 +126,17 @@ def _plot_stacked_bars(
     if n == 0 or m == 0:
         raise ValueError("Sem dados para plotar")
 
-    fig, ax = plt.subplots(figsize=SLIDE20_STACKED_FIGSIZE, dpi=240)
+    fig, ax = plt.subplots(figsize=SLIDE19_FIGSIZE, dpi=240)
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    x = np.arange(n, dtype=float) * SLIDE20_STACKED_BAR_SLOT
-    width = SLIDE20_STACKED_BAR_WIDTH
+    x = np.arange(n, dtype=float) * SLIDE19_BAR_SLOT
+    width = SLIDE19_BAR_WIDTH
     bottom = np.zeros(n, dtype=float)
     segment_centers: list[list[float]] = [[] for _ in range(m)]
     totals = np.nansum(np.where(np.isfinite(values), values, 0.0), axis=1).astype(float)
+    major_indices = _major_series_indices(values)
+    colors = [color for _, color in SLIDE19_SERIES]
 
     for j in range(m):
         y = np.asarray(values[:, j], dtype=float)
@@ -128,16 +159,21 @@ def _plot_stacked_bars(
                 segment_centers[j].append(float("nan"))
                 continue
             yc = float(bottom[i]) + value / 2.0
+            label = _fmt_value(value)
+            if major_indices[i] == j and np.isfinite(totals[i]) and totals[i] > 0:
+                share = (value / float(totals[i])) * 100.0
+                label = f"{label}\n({_fmt_share_pct(share)})"
             segment_centers[j].append(yc)
             ax.text(
                 float(x[i]),
                 yc,
-                _fmt_k(value),
+                label,
                 ha="center",
                 va="center",
-                fontsize=8.8 * SLIDE20_STACKED_FONT_SCALE,
+                fontsize=8.8 * SLIDE19_STACKED_FONT_SCALE,
                 color=txt_color,
                 zorder=4,
+                linespacing=0.95,
                 clip_on=False,
             )
 
@@ -152,10 +188,10 @@ def _plot_stacked_bars(
         ax.text(
             float(x[i]),
             y_label,
-            _fmt_k(total),
+            _fmt_value(total),
             ha="center",
             va="bottom",
-            fontsize=9.8 * SLIDE20_STACKED_FONT_SCALE,
+            fontsize=9.8 * SLIDE19_STACKED_FONT_SCALE,
             fontweight="bold" if i == n - 1 else "normal",
             color="#2f2f2f",
             zorder=5,
@@ -192,7 +228,7 @@ def _plot_stacked_bars(
                 _fmt_bracket_pct(curr, prev),
                 ha="center",
                 va="bottom",
-                fontsize=9.0 * SLIDE20_STACKED_FONT_SCALE,
+                fontsize=9.0 * SLIDE19_STACKED_FONT_SCALE,
                 color="#2f2f2f",
                 zorder=5,
             )
@@ -203,7 +239,7 @@ def _plot_stacked_bars(
             ax.set_ylim(ymin, max(ymax, max_text_y + offset_y * 0.9))
 
     max_name_len = max((len(str(name).strip()) for name in series_names), default=1)
-    left_margin = max(1.65, 0.80 + max_name_len * 0.05)
+    left_margin = max(1.95, 0.92 + max_name_len * 0.055)
     x_text = float(x[0]) - width / 2.0 - 0.20
     connector_start = x_text + 0.06
     connector_end = float(x[0]) - width / 2.0 - 0.05
@@ -232,7 +268,7 @@ def _plot_stacked_bars(
             str(name),
             ha="right",
             va="center",
-            fontsize=8.8 * SLIDE20_STACKED_FONT_SCALE,
+            fontsize=8.8 * SLIDE19_STACKED_FONT_SCALE,
             color="#2f2f2f",
             zorder=7,
             clip_on=False,
@@ -241,7 +277,7 @@ def _plot_stacked_bars(
     ax.axhline(0.0, color="#b5b5b5", linewidth=0.9, zorder=1)
     ax.set_xlim(float(x.min()) - (left_margin + 0.10), float(x.max()) + 0.36)
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0 * SLIDE20_STACKED_FONT_SCALE)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * SLIDE19_STACKED_FONT_SCALE)
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for spine in ("left", "right", "top", "bottom"):
@@ -260,7 +296,9 @@ def _plot_simple_bars(
     xlabels: list[str],
     values: list[float] | np.ndarray,
     output_path: Path,
-    bar_color: str = SLIDE20_SIMPLE_BAR_COLOR,
+    bar_color: str = SLIDE19_SIMPLE_BAR_COLOR,
+    bar_width: float = SLIDE19_SIMPLE_BAR_WIDTH,
+    bar_slot: float = SLIDE19_SIMPLE_BAR_SLOT,
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -269,26 +307,26 @@ def _plot_simple_bars(
     if n == 0:
         raise ValueError("Sem dados para plotar")
 
-    fig, ax = plt.subplots(figsize=SLIDE20_SIMPLE_FIGSIZE, dpi=240)
+    fig, ax = plt.subplots(figsize=(6.5, 3.1), dpi=240)
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    x = np.arange(n, dtype=float) * SLIDE20_SIMPLE_BAR_SLOT
-    bars = ax.bar(x, vals, width=SLIDE20_SIMPLE_BAR_WIDTH, color=bar_color, edgecolor="none", zorder=2)
+    x = np.arange(n, dtype=float) * float(bar_slot)
+    bars = ax.bar(x, vals, width=float(bar_width), color=bar_color, edgecolor="none", zorder=2)
 
     label_tops: list[float] = []
     for i, (rect, value) in enumerate(zip(bars, vals)):
         if not np.isfinite(value):
             continue
-        y_label = float(rect.get_height()) + max(abs(float(value)) * 0.03, 0.18)
+        y_label = float(rect.get_height()) + max(abs(float(value)) * 0.03, 8.0)
         label_tops.append(y_label)
         ax.text(
             rect.get_x() + rect.get_width() / 2.0,
             y_label,
-            _fmt_dec(value, 1),
+            _fmt_value(value),
             ha="center",
             va="bottom",
-            fontsize=9.8 * SLIDE20_SIMPLE_FONT_SCALE,
+            fontsize=9.8 * SLIDE19_SIMPLE_FONT_SCALE,
             fontweight="bold" if i == n - 1 else "normal",
             color="#2f2f2f",
             zorder=4,
@@ -297,10 +335,10 @@ def _plot_simple_bars(
 
     if n >= 2:
         abs_max = float(np.nanmax(np.abs(vals))) if np.isfinite(np.nanmax(np.abs(vals))) else 0.0
-        offset_y = max(abs_max * 0.08, 0.22)
-        bracket_h = max(abs_max * 0.03, 0.14)
+        offset_y = max(abs_max * 0.08, 10.0)
+        bracket_h = max(abs_max * 0.03, 8.0)
         top_labels_max = max(label_tops) if label_tops else float(np.nanmax(vals))
-        top_base = float(top_labels_max) + max(abs_max * 0.08, 0.28)
+        top_base = float(top_labels_max) + max(abs_max * 0.08, 12.0)
         max_text_y: float | None = None
 
         for i in range(1, n):
@@ -325,7 +363,7 @@ def _plot_simple_bars(
                 _fmt_bracket_pct(curr, prev),
                 ha="center",
                 va="bottom",
-                fontsize=9.0 * SLIDE20_SIMPLE_FONT_SCALE,
+                fontsize=9.0 * SLIDE19_SIMPLE_FONT_SCALE,
                 color="#2f2f2f",
                 zorder=5,
             )
@@ -337,7 +375,7 @@ def _plot_simple_bars(
 
     ax.axhline(0.0, color="#b5b5b5", linewidth=0.9, zorder=1)
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0 * SLIDE20_SIMPLE_FONT_SCALE)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * SLIDE19_SIMPLE_FONT_SCALE)
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for spine in ("left", "right", "top", "bottom"):
@@ -351,49 +389,61 @@ def _plot_simple_bars(
     close_figure(fig)
 
 
-def generate_slide20_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
-    """Slide 20: empilhado de Empréstimos + barras simples de Seguros e Cartões."""
+def generate_slide19_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
+    """Slide 19: empilhado de veículos por trimestre."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     wb = load_workbook(filename=xlsx_path, data_only=True)
-    ws_emprestimos = wb[_resolve_sheet_name(wb, SLIDE20_EMPRESTIMOS_SHEET_CANDIDATES, "Empréstimos")]
-    ws_seguros = wb[_resolve_sheet_name(wb, SLIDE20_SEGUROS_SHEET_CANDIDATES, "Seguros e Cartões")]
+    ws_veiculos = wb[_resolve_veiculos_sheet_name(wb)]
+    ws_seguros = wb[_resolve_seguros_sheet_name(wb)]
 
-    xlabels_emp = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_emprestimos, "D3:F3")]
-    outros_d5 = np.asarray([_to_float_or_nan(v) for v in _read_range_row(ws_emprestimos, "D5:F5")], dtype=float)
-    placas = np.asarray([_to_float_or_nan(v) for v in _read_range_row(ws_emprestimos, "D6:F6")], dtype=float)
-    outros_d7 = np.asarray([_to_float_or_nan(v) for v in _read_range_row(ws_emprestimos, "D7:F7")], dtype=float)
-    egv = np.asarray([_to_float_or_nan(v) for v in _read_range_row(ws_emprestimos, "D8:F8")], dtype=float)
-    outros = np.nansum(np.where(np.isfinite(np.vstack([outros_d5, outros_d7])), np.vstack([outros_d5, outros_d7]), 0.0), axis=0)
+    xlabels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_veiculos, "D14:F14")]
 
-    emprestimos_values = np.column_stack([egv, placas, outros]).astype(float) / 1000.0
-    emprestimos_output = output_dir / SLIDE20_EMPRESTIMOS_OUTPUT
-    _plot_stacked_bars(
-        xlabels=xlabels_emp,
-        series_names=[name for name, _ in SLIDE20_STACKED_SERIES],
-        values=emprestimos_values,
-        output_path=emprestimos_output,
-        colors=[color for _, color in SLIDE20_STACKED_SERIES],
+    leves_usados = np.asarray([_to_float_or_nan(v) for v in _read_range_row(ws_veiculos, "D21:F21")], dtype=float)
+    outros_rows = np.asarray(
+        [[_to_float_or_nan(v) for v in _read_range_row(ws_veiculos, f"D{row}:F{row}")] for row in (22, 23)],
+        dtype=float,
+    )
+    outros_veiculos = np.nansum(np.where(np.isfinite(outros_rows), outros_rows, 0.0), axis=0)
+
+    values = np.column_stack([leves_usados, outros_veiculos]).astype(float)
+    output_path = output_dir / SLIDE19_VEICULOS_OUTPUT
+    _plot_stacked_veiculos(
+        xlabels=xlabels,
+        series_names=[name for name, _ in SLIDE19_SERIES],
+        values=values,
+        output_path=output_path,
     )
 
-    xlabels_seg = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_seguros, "D11:F11")]
-    seguros_values = (np.asarray([_to_float_or_nan(v) for v in _read_range_row(ws_seguros, "D15:F15")], dtype=float) / 1000.0)
-    seguros_output = output_dir / SLIDE20_SEGUROS_OUTPUT
+    seguros_trim_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_seguros, "D3:F3")]
+    seguros_trim_values = [_to_float_or_nan(v) for v in _read_range_row(ws_seguros, "D8:F8")]
+    seguros_trim_output = output_dir / SLIDE19_SEGUROS_TRIMESTRES_OUTPUT
     _plot_simple_bars(
-        xlabels=xlabels_seg,
-        values=seguros_values,
-        output_path=seguros_output,
+        xlabels=seguros_trim_labels,
+        values=seguros_trim_values,
+        output_path=seguros_trim_output,
     )
 
-    return [emprestimos_output, seguros_output]
+    seguros_ano_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_seguros, "G3:H3")]
+    seguros_ano_values = [_to_float_or_nan(v) for v in _read_range_row(ws_seguros, "G8:H8")]
+    seguros_ano_output = output_dir / SLIDE19_SEGUROS_ANOS_OUTPUT
+    _plot_simple_bars(
+        xlabels=seguros_ano_labels,
+        values=seguros_ano_values,
+        output_path=seguros_ano_output,
+        bar_width=SLIDE19_SIMPLE_ANOS_BAR_WIDTH,
+        bar_slot=SLIDE19_SIMPLE_ANOS_BAR_SLOT,
+    )
+
+    return [output_path, seguros_trim_output, seguros_ano_output]
 
 
 if __name__ == "__main__":
     xlsx = Path("testing.xlsx")
     out = Path(".")
     if xlsx.exists():
-        files = generate_slide20_charts(xlsx_path=xlsx, output_dir=out)
+        files = generate_slide19_charts(xlsx_path=xlsx, output_dir=out)
         print(f"Gerados: {files}")
     else:
         print(f"Arquivo {xlsx} não encontrado")

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from utils.xlsx_text_fields import (
+from src.utils.xlsx_text_fields import (
     TextFieldSpec,
     extract_workbook_text_mapping_tolerant,
     extract_workbook_text_mapping,
@@ -188,7 +188,7 @@ class TestXlsxTextFields(unittest.TestCase):
 
             specs = [TextFieldSpec(id="ROE_RECORRENTE", a1_range="K20", sheet="DRE Saida")]
 
-            with patch("utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
+            with patch("src.utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
                 out = extract_xlsx_to_text_mapping(xlsx_path, specs)
 
         self.assertEqual(out["ROE_RECORRENTE"], "0.1234")
@@ -203,7 +203,7 @@ class TestXlsxTextFields(unittest.TestCase):
                 TextFieldSpec(id="CAMPO_INVALIDO", a1_range="B2", sheet="Aba Inexistente"),
             ]
 
-            with patch("utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
+            with patch("src.utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
                 result = extract_xlsx_to_text_mapping_tolerant(xlsx_path, specs)
 
         self.assertEqual(result.mapping["ROE_RECORRENTE"], "0.1234")

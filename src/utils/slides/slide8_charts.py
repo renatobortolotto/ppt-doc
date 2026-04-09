@@ -6,7 +6,7 @@ import numpy as np
 from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
-from utils.charts_common import close_figure
+from src.utils.charts_common import close_figure
 
 
 def _text_color_for_bg_rgba(rgba) -> str:

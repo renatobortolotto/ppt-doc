@@ -5,7 +5,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
-from utils.charts_common import (
+from src.utils.charts_common import (
     ExcelBarChartSpec,
     close_figure,
     plot_bar_from_excel,

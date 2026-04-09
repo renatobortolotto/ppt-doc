@@ -18,7 +18,7 @@ from update_ppt import (
     main as update_ppt_main,
     update_presentation,
 )
-from utils.ppt_tables_slide_24 import SLIDE24_TABLE_ALT_TEXT
+from src.utils.ppt_tables_slide_24 import SLIDE24_TABLE_ALT_TEXT
 
 
 class TestUpdatePpt(unittest.TestCase):

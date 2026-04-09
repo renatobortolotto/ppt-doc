@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from utils.xlsx_extract import (
+from src.utils.xlsx_extract import (
     ExtractSpec,
     extract_xlsx_bytes_to_dict,
     extract_xlsx_to_dict,
@@ -116,7 +116,7 @@ class TestXlsxExtract(unittest.TestCase):
             )
         ]
 
-        with patch("utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
+        with patch("src.utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
             out = extract_xlsx_bytes_to_dict(b"any", specs, include_meta=True)
 
         self.assertIn("lucroTrimestre", out)
@@ -134,7 +134,7 @@ class TestXlsxExtract(unittest.TestCase):
             )
         ]
 
-        with patch("utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
+        with patch("src.utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
             out = extract_xlsx_bytes_to_dict(
                 b"any",
                 specs,
@@ -162,7 +162,7 @@ class TestXlsxExtract(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             with patch(
-                "utils.xlsx_extract._load_workbook",
+                "src.utils.xlsx_extract._load_workbook",
                 side_effect=ValueError("Arquivo enviado não é um XLSX válido"),
             ):
                 extract_xlsx_bytes_to_dict(b"bad", specs)
@@ -181,7 +181,7 @@ class TestXlsxExtract(unittest.TestCase):
                 )
             ]
 
-            with patch("utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
+            with patch("src.utils.xlsx_extract._load_workbook", return_value=_fake_workbook()):
                 out = extract_xlsx_to_dict(xlsx_path, specs, include_meta=False)
 
         self.assertEqual(out["single"]["Labels"], ["ONLY_LABEL"])

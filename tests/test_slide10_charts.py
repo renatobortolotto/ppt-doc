@@ -4,7 +4,7 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from utils.slides.slide10_charts import _find_title_index, _pick_remaining, _sanitize_filename, generate_slide10_charts
+from src.utils.slides.slide10_charts import _find_title_index, _pick_remaining, _sanitize_filename, generate_slide10_charts
 
 
 class TestSlide10Charts(unittest.TestCase):

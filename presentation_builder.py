@@ -12,27 +12,27 @@ from typing import Any, Callable, Dict, Mapping, Sequence
 from xml.etree import ElementTree as ET
 
 from update_ppt import _flatten_text_payload, update_presentation
-from utils.slides.slide11_charts import generate_slide11_charts
-from utils.slides.slide12_charts import generate_slide12_charts
-from utils.slides.slide13_charts import generate_slide13_charts
-from utils.slides.slide14_charts import generate_slide14_charts
-from utils.slides.slide15_charts import generate_slide15_charts
-from utils.slides.slide16_charts import generate_slide16_charts
-from utils.slides.slide20_charts import generate_slide20_charts
-from utils.slides.slide21_charts import generate_slide21_charts
-from utils.slides.slide22_charts import generate_slide22_charts
-from utils.slides.slide19_charts import generate_slide19_charts
-from utils.slides.slide8_charts import generate_slide8_charts
-from utils.slides.slide9_charts import generate_slide9_charts
-from utils.slides.slide4_charts import generate_slide4_charts
+from src.utils.slides.slide11_charts import generate_slide11_charts
+from src.utils.slides.slide12_charts import generate_slide12_charts
+from src.utils.slides.slide13_charts import generate_slide13_charts
+from src.utils.slides.slide14_charts import generate_slide14_charts
+from src.utils.slides.slide15_charts import generate_slide15_charts
+from src.utils.slides.slide16_charts import generate_slide16_charts
+from src.utils.slides.slide20_charts import generate_slide20_charts
+from src.utils.slides.slide21_charts import generate_slide21_charts
+from src.utils.slides.slide22_charts import generate_slide22_charts
+from src.utils.slides.slide19_charts import generate_slide19_charts
+from src.utils.slides.slide8_charts import generate_slide8_charts
+from src.utils.slides.slide9_charts import generate_slide9_charts
+from src.utils.slides.slide4_charts import generate_slide4_charts
 
 try:
-    from utils.slides.slide18_charts import generate_slide18_charts
+    from src.utils.slides.slide18_charts import generate_slide18_charts
 except ModuleNotFoundError:
     def generate_slide18_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
-        raise ModuleNotFoundError("utils.slides.slide18_charts nao esta disponivel no workspace atual")
-from utils.xlsx_extract import _load_workbook as _load_validated_workbook
-from utils.xlsx_text_fields import (
+        raise ModuleNotFoundError("src.utils.slides.slide18_charts nao esta disponivel no workspace atual")
+from src.utils.xlsx_extract import _load_workbook as _load_validated_workbook
+from src.utils.xlsx_text_fields import (
     TextFieldExtractionResult,
     TextFieldFailure,
     extract_xlsx_to_text_mapping_tolerant,

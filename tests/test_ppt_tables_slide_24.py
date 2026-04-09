@@ -6,7 +6,7 @@ from openpyxl import Workbook
 from pptx import Presentation
 from pptx.util import Pt
 
-from utils.ppt_tables_slide_24 import (
+from src.utils.ppt_tables_slide_24 import (
     SLIDE24_SHEET_NAME,
     SLIDE24_TABLE_ALT_TEXT,
     apply_slide24_table_file,

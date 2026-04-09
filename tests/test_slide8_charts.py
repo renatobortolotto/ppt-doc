@@ -4,7 +4,7 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
-from utils.slides.slide8_charts import _read_stacked_rows, _wrap_words, generate_slide8_charts
+from src.utils.slides.slide8_charts import _read_stacked_rows, _wrap_words, generate_slide8_charts
 
 
 class TestSlide8Charts(unittest.TestCase):

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from openpyxl import Workbook
 
-from utils.slides.slide9_charts import _wrap_words, generate_slide9_charts
+from src.utils.slides.slide9_charts import _wrap_words, generate_slide9_charts
 
 
 class TestSlide9Charts(unittest.TestCase):
@@ -73,10 +73,10 @@ class TestSlide9Charts(unittest.TestCase):
             output_dir = Path(td) / "out"
             wb.save(xlsx_path)
 
-            with patch("utils.slides.slide9_charts._plot_stacked_bars_with_total", side_effect=_capture_stacked):
-                with patch("utils.slides.slide9_charts._plot_indice_cobertura_percent", side_effect=_capture_cobertura):
-                    with patch("utils.slides.slide9_charts.plot_line_from_excel", side_effect=_capture_line):
-                        with patch("utils.slides.slide9_charts.close_figure"):
+            with patch("src.utils.slides.slide9_charts._plot_stacked_bars_with_total", side_effect=_capture_stacked):
+                with patch("src.utils.slides.slide9_charts._plot_indice_cobertura_percent", side_effect=_capture_cobertura):
+                    with patch("src.utils.slides.slide9_charts.plot_line_from_excel", side_effect=_capture_line):
+                        with patch("src.utils.slides.slide9_charts.close_figure"):
                             files = generate_slide9_charts(xlsx_path=xlsx_path, output_dir=output_dir)
 
         self.assertEqual(len(files), 5)

@@ -5,7 +5,7 @@ from unittest.mock import patch
 import tempfile
 import zipfile
 
-from utils.xlsx_text_fields import TextFieldSpec
+from src.utils.xlsx_text_fields import TextFieldSpec
 
 from presentation_builder import (
     BuildPresentationResult,

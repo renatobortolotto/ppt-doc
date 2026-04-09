@@ -8,7 +8,7 @@ import numpy as np
 from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
-from utils.charts_common import close_figure
+from src.utils.charts_common import close_figure
 
 
 SLIDE22_SHEET_CANDIDATES = ("Qualidade Cart 4966",)

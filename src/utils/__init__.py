@@ -1,4 +1,4 @@
-from utils.charts_common import (
+from src.utils.charts_common import (
     ExcelBarChartSpec,
     ExcelDonutChartSpec,
     close_figure,

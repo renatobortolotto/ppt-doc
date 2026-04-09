@@ -6,7 +6,7 @@ from pathlib import Path
 from matplotlib.patches import Wedge
 from openpyxl import Workbook
 
-from utils.charts_common import (
+from src.utils.charts_common import (
     _spread_y_positions,
     ExcelBarChartSpec,
     close_figure,

@@ -7,7 +7,7 @@ import numpy as np
 from openpyxl import load_workbook
 from openpyxl.utils.cell import range_boundaries
 
-from utils.charts_common import close_figure
+from src.utils.charts_common import close_figure
 
 
 SLIDE21_STACKED_OUTPUT = "21_carteira_atacado_empilhado.png"

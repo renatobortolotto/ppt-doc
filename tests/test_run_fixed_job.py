@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from presentation_builder import ChartGenerationFailure
-from utils.xlsx_text_fields import TextFieldFailure
+from src.utils.xlsx_text_fields import TextFieldFailure
 from run_fixed_job import _parse_only_slides
 from run_fixed_job import main as run_fixed_job_main
 

@@ -63,6 +63,29 @@ Helpers disponiveis:
 - `compose_presentation_files(xlsx_file, llm_response_file)`
 - `compose_presentation_from_inputs(xlsx_bytes, llm_response_bytes)`
 
+## Teste local do endpoint
+
+Se voce quiser testar a rota HTTP sem usar `curl`, rode o utilitario abaixo com `requests`:
+
+```bash
+cd /home/renato/projetos/double-projects/ppt-doc
+./.venv/bin/python scripts/test_build_pptx_request.py --xlsx testing.xlsx --llm-json llm_response.latest.json
+```
+
+No Windows/PowerShell:
+
+```powershell
+cd C:\caminho\para\ppt-doc
+.\.venv\Scripts\python.exe scripts\test_build_pptx_request.py --xlsx testing.xlsx --llm-json llm_response.latest.json
+```
+
+Opcoes uteis:
+
+- `--url http://localhost:8080/api/build-pptx`
+- `--token <JWT>`
+- `--save-pptx C:\temp\resultado.pptx`
+- `--save-response-json C:\temp\build-pptx.response.json`
+
 ## Runner local
 
 Se voce quer rodar localmente sem depender do runtime corporativo, use `run_fixed_job.py`.

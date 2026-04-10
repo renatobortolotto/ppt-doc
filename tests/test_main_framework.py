@@ -74,20 +74,20 @@ class TestMainFramework(unittest.TestCase):
             chart_failures=(
                 ChartGenerationFailure(
                     generator_key="slide4",
-                    label="slide 4",
+                    label='slide 4 <script>alert("x")</script>',
                     output_files=("10_pizza_carteira.png",),
-                    error="Valor nao numerico",
+                    error='Valor nao numerico <img src=x onerror=alert(1)>',
                 ),
             ),
             text_field_failures=(
                 TextFieldFailure(
                     field_id="ROE_RECORRENTE",
-                    sheet="DRE Saida",
+                    sheet='DRE Saida <b>x</b>',
                     a1_range="K20",
-                    error="Aba nao encontrada",
+                    error='Aba nao encontrada <script>alert(1)</script>',
                 ),
             ),
-            applied_text_keys=("slide1_title",),
+            applied_text_keys=('slide1_title"><script>alert(1)</script>',),
         )
         with patch(
             f"{module.__name__}.load_job_config",
@@ -106,8 +106,13 @@ class TestMainFramework(unittest.TestCase):
         self.assertEqual(resp["summary"]["replacedPictures"], 3)
         self.assertEqual(resp["summary"]["chartFailureCount"], 1)
         self.assertEqual(resp["summary"]["chartFailures"][0]["generatorKey"], "slide4")
+        self.assertIn("&lt;script&gt;", resp["summary"]["chartFailures"][0]["label"])
+        self.assertIn("&lt;img", resp["summary"]["chartFailures"][0]["error"])
         self.assertEqual(resp["summary"]["textFieldFailureCount"], 1)
         self.assertEqual(resp["summary"]["textFieldFailures"][0]["fieldId"], "ROE_RECORRENTE")
+        self.assertIn("&lt;b&gt;", resp["summary"]["textFieldFailures"][0]["sheet"])
+        self.assertIn("&lt;script&gt;", resp["summary"]["textFieldFailures"][0]["error"])
+        self.assertIn("&lt;script&gt;", resp["summary"]["appliedTextKeys"][0])
         self.assertTrue(resp["pptxBase64"])
 
     def test_compose_presentation_from_inputs_prefers_api_output_filename(self):
@@ -152,6 +157,7 @@ class TestMainFramework(unittest.TestCase):
             "Falha ao montar o PowerPoint a partir do XLSX e do JSON da LLM.",
         )
         self.assertIn("details", resp)
+        self.assertEqual(resp["errorCode"], "invalid_request")
 
     def test_compose_presentation_files_success(self):
         module = _load_main_framework()
@@ -173,7 +179,7 @@ class TestMainFramework(unittest.TestCase):
         with patch.object(
             module,
             "compose_presentation_from_inputs",
-            side_effect=RuntimeError("boom"),
+            side_effect=RuntimeError('<script>alert("boom")</script>'),
         ):
             resp = module.compose_presentation_files(
                 DummyFileInput(b"xlsx"),
@@ -184,7 +190,8 @@ class TestMainFramework(unittest.TestCase):
             resp["error"],
             "Falha ao montar o PowerPoint a partir do XLSX e do JSON da LLM.",
         )
-        self.assertEqual(resp["details"], "boom")
+        self.assertEqual(resp["errorCode"], "build_failed")
+        self.assertEqual(resp["details"], "Consulte os logs do servidor para detalhes tecnicos.")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from presentation_builder import build_presentation_from_bytes, load_job_config
+from src.application.response_safety import build_error_response, serialize_build_response
 from src.infrastructure.framework_compat import Resource, request
 
 
@@ -26,44 +27,6 @@ def _parse_llm_payload(llm_response_bytes: bytes) -> object:
         raise ValueError("JSON da LLM invalido") from exc
 
 
-def _serialize_build_response(*, pptx_bytes: bytes, filename: str, result) -> Dict[str, Any]:
-    chart_failures = getattr(result, "chart_failures", ())
-    text_field_failures = getattr(result, "text_field_failures", ())
-    return {
-        "filename": filename,
-        "contentType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "pptxBase64": base64.b64encode(pptx_bytes).decode("ascii"),
-        "summary": {
-            "outputPath": str(result.output_path),
-            "replacedPictures": result.replaced_pictures,
-            "replacedPlaceholders": result.replaced_placeholders,
-            "replacedText": result.replaced_text,
-            "generatedChartCount": result.generated_chart_count,
-            "chartFailureCount": len(chart_failures),
-            "chartFailures": [
-                {
-                    "generatorKey": failure.generator_key,
-                    "label": failure.label,
-                    "outputFiles": list(failure.output_files),
-                    "error": failure.error,
-                }
-                for failure in chart_failures
-            ],
-            "textFieldFailureCount": len(text_field_failures),
-            "textFieldFailures": [
-                {
-                    "fieldId": failure.field_id,
-                    "sheet": failure.sheet,
-                    "range": failure.a1_range,
-                    "error": failure.error,
-                }
-                for failure in text_field_failures
-            ],
-            "appliedTextKeys": list(result.applied_text_keys),
-        },
-    }
-
-
 def compose_presentation_from_inputs(xlsx_bytes: bytes, llm_response_bytes: bytes) -> Dict[str, Any]:
     repo_root = _repo_root()
     cfg = load_job_config(repo_root)
@@ -77,7 +40,7 @@ def compose_presentation_from_inputs(xlsx_bytes: bytes, llm_response_bytes: byte
     filename = Path(
         str(cfg.get("api_output_filename") or cfg.get("pptx_output") or "presentation.updated.pptx")
     ).name
-    return _serialize_build_response(
+    return serialize_build_response(
         pptx_bytes=pptx_bytes,
         filename=filename,
         result=result,
@@ -210,16 +173,19 @@ def handle_build_pptx_request(request_obj: Any | None = None) -> tuple[Dict[str,
         response = compose_presentation_from_inputs(xlsx_bytes, llm_response_bytes)
         return response, 200
     except ValueError as exc:
-        return {
-            "error": "Requisicao invalida para build-pptx.",
-            "details": str(exc),
-        }, 400
-    except Exception as exc:
+        logging.warning("Requisicao invalida para build-pptx: %s", exc)
+        return build_error_response(
+            error="Requisicao invalida para build-pptx.",
+            error_code="invalid_request",
+            details="Verifique o payload enviado e os arquivos recebidos.",
+        ), 400
+    except Exception:
         logging.exception("Falha ao processar a requisicao build-pptx")
-        return {
-            "error": "Falha ao montar o PowerPoint a partir do XLSX e do JSON da LLM.",
-            "details": str(exc),
-        }, 500
+        return build_error_response(
+            error="Falha ao montar o PowerPoint a partir do XLSX e do JSON da LLM.",
+            error_code="build_failed",
+            details="Consulte os logs do servidor para detalhes tecnicos.",
+        ), 500
 
 
 class BuildPptxResource(Resource):

@@ -4,6 +4,12 @@ import logging
 import os
 from typing import Any, Callable
 
+try:
+    from flask_restful import Resource
+except ModuleNotFoundError:
+    class Resource:
+        pass
+
 
 try:
     from OPatomic import Environments, OPAtomic, request
@@ -55,7 +61,7 @@ except ModuleNotFoundError:
         def create_app(self) -> _LocalApp:
             return self._app
 
-        def create_route(self, handler: Callable[..., Any], path: str) -> Callable[..., Any]:
+        def create_route(self, handler: Any, path: str) -> Any:
             full_path = f"{self.prefix}{path}" if self.prefix else path
             self._app.registered_routes.append(
                 {

@@ -2,8 +2,9 @@ import types
 import unittest
 from unittest.mock import patch
 
-from src.application.build_pptx import handle_build_pptx_request
+from src.application.build_pptx import BuildPptxResource, handle_build_pptx_request
 from src.controller.app import app
+from src.infrastructure.framework_compat import Resource
 from src.routes import create_routes
 
 
@@ -31,14 +32,28 @@ class _FakeRequest:
 
 
 class TestPyWebFramework(unittest.TestCase):
-    def test_create_routes_registers_build_pptx_handler(self):
+    def test_create_routes_registers_build_pptx_resource(self):
         app.registered_routes.clear()
 
         create_routes()
 
         self.assertEqual(len(app.registered_routes), 1)
         self.assertEqual(app.registered_routes[0]["path"], "/api/build-pptx")
-        self.assertEqual(app.registered_routes[0]["handler"].__name__, "build_pptx_route")
+        self.assertIs(app.registered_routes[0]["handler"], BuildPptxResource)
+        self.assertTrue(issubclass(app.registered_routes[0]["handler"], Resource))
+
+    def test_build_pptx_resource_post_delegates_to_request_handler(self):
+        resource = BuildPptxResource()
+
+        with patch(
+            "src.application.build_pptx.handle_build_pptx_request",
+            return_value=({"filename": "ok.pptx"}, 200),
+        ) as handler_mock:
+            body, status = resource.post()
+
+        self.assertEqual(status, 200)
+        self.assertEqual(body["filename"], "ok.pptx")
+        handler_mock.assert_called_once_with()
 
     def test_handle_build_pptx_request_accepts_multipart_uploads(self):
         request_obj = _FakeRequest(

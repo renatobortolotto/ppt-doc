@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from presentation_builder import build_presentation_from_bytes, load_job_config
-from src.infrastructure.framework_compat import request
+from src.infrastructure.framework_compat import Resource, request
 
 
 def _repo_root() -> Path:
@@ -222,5 +222,6 @@ def handle_build_pptx_request(request_obj: Any | None = None) -> tuple[Dict[str,
         }, 500
 
 
-def build_pptx_route():
-    return handle_build_pptx_request()
+class BuildPptxResource(Resource):
+    def post(self):
+        return handle_build_pptx_request()

@@ -6,7 +6,9 @@ from unittest.mock import patch
 
 from src.application.build_pptx import (
     BuildPptxResource,
+    PPTX_CONTENT_TYPE,
     compose_presentation_from_inputs,
+    compose_presentation_download_response,
     handle_build_pptx_request,
 )
 from src.infrastructure.framework_compat import Resource
@@ -25,12 +27,13 @@ class _FakeUpload:
 
 
 class _FakeRequest:
-    def __init__(self, *, files=None, form=None, json_payload=None):
+    def __init__(self, *, files=None, form=None, json_payload=None, method="POST"):
         self.files = files or {}
         self.form = form or {}
         self._json_payload = json_payload
         self.headers = {}
         self.path = "/api/build-pptx"
+        self.method = method
 
     def get_json(self, silent: bool = False):
         return self._json_payload
@@ -58,12 +61,11 @@ class TestPyWebFramework(unittest.TestCase):
 
         with patch(
             "src.application.build_pptx.handle_build_pptx_request",
-            return_value=({"filename": "ok.pptx"}, 200),
+            return_value="ok-response",
         ) as handler_mock:
-            body, status = resource.post()
+            response = resource.post()
 
-        self.assertEqual(status, 200)
-        self.assertEqual(body["filename"], "ok.pptx")
+        self.assertEqual(response, "ok-response")
         handler_mock.assert_called_once_with()
 
     def test_handle_build_pptx_request_accepts_multipart_uploads(self):
@@ -75,13 +77,12 @@ class TestPyWebFramework(unittest.TestCase):
         )
 
         with patch(
-            "src.application.build_pptx.compose_presentation_from_inputs",
-            return_value={"filename": "ok.pptx"},
+            "src.application.build_pptx.compose_presentation_download_response",
+            return_value="download-response",
         ) as compose_mock:
-            body, status = handle_build_pptx_request(request_obj)
+            response = handle_build_pptx_request(request_obj)
 
-        self.assertEqual(status, 200)
-        self.assertEqual(body["filename"], "ok.pptx")
+        self.assertEqual(response, "download-response")
         compose_mock.assert_called_once_with(b"xlsx-bytes", b'{"response":{}}')
 
     def test_handle_build_pptx_request_accepts_json_base64_payload(self):
@@ -93,13 +94,12 @@ class TestPyWebFramework(unittest.TestCase):
         )
 
         with patch(
-            "src.application.build_pptx.compose_presentation_from_inputs",
-            return_value={"filename": "ok.pptx"},
+            "src.application.build_pptx.compose_presentation_download_response",
+            return_value="download-response",
         ) as compose_mock:
-            body, status = handle_build_pptx_request(request_obj)
+            response = handle_build_pptx_request(request_obj)
 
-        self.assertEqual(status, 200)
-        self.assertEqual(body["filename"], "ok.pptx")
+        self.assertEqual(response, "download-response")
         compose_mock.assert_called_once_with(b"xlsx-bytes", b'{"response":{}}')
 
     def test_compose_presentation_from_inputs_serializes_success_response(self):
@@ -131,6 +131,37 @@ class TestPyWebFramework(unittest.TestCase):
         self.assertEqual(body["summary"]["generatedChartCount"], 3)
         self.assertTrue(body["pptxBase64"])
 
+    def test_compose_presentation_download_response_returns_binary_attachment(self):
+        fake_build = types.SimpleNamespace(
+            output_path=Path("saida.pptx"),
+            replaced_pictures=1,
+            replaced_placeholders=0,
+            replaced_text=2,
+            generated_chart_count=3,
+            chart_failures=(),
+            text_field_failures=(),
+            applied_text_keys=("slide1_title",),
+        )
+
+        with patch(
+            "src.application.build_pptx.load_job_config",
+            return_value={"pptx_output": "main_testing.pptx"},
+        ):
+            with patch(
+                "src.application.build_pptx.build_presentation_from_bytes",
+                return_value=(b"pptx-bytes", fake_build),
+            ):
+                response = compose_presentation_download_response(
+                    b"xlsx-bytes",
+                    b'{"response":{}}',
+                )
+
+        self.assertEqual(getattr(response, "status_code", None), 200)
+        self.assertEqual(response.headers.get("Content-Type"), PPTX_CONTENT_TYPE)
+        self.assertIn("attachment;", response.headers.get("Content-Disposition", ""))
+        self.assertIn("main_testing.pptx", response.headers.get("Content-Disposition", ""))
+        self.assertEqual(response.get_data(), b"pptx-bytes")
+
     def test_handle_build_pptx_request_returns_400_for_missing_payload(self):
         body, status = handle_build_pptx_request(_FakeRequest())
 
@@ -147,7 +178,7 @@ class TestPyWebFramework(unittest.TestCase):
         )
 
         with patch(
-            "src.application.build_pptx.compose_presentation_from_inputs",
+            "src.application.build_pptx.compose_presentation_download_response",
             side_effect=RuntimeError('<script>alert("x")</script>'),
         ):
             body, status = handle_build_pptx_request(request_obj)

@@ -4,6 +4,24 @@ import base64
 from html import escape
 from pathlib import Path
 from typing import Any, Dict, Mapping
+from urllib.parse import quote
+
+try:
+    from flask import Response
+except ModuleNotFoundError:
+    class Response:
+        def __init__(self, response=b"", status=200, headers=None, mimetype=None):
+            self.status_code = status
+            self.headers = dict(headers or {})
+            self.mimetype = mimetype
+            if mimetype and "Content-Type" not in self.headers:
+                self.headers["Content-Type"] = mimetype
+            self.data = response if isinstance(response, (bytes, bytearray)) else str(response).encode("utf-8")
+
+        def get_data(self, as_text: bool = False):
+            if as_text:
+                return self.data.decode("utf-8")
+            return self.data
 
 
 def sanitize_response_value(value: Any) -> Any:
@@ -67,3 +85,20 @@ def build_error_response(*, error: str, error_code: str, details: str) -> Dict[s
             "details": details,
         }
     )
+
+
+def build_file_response(*, body: bytes, filename: str, content_type: str) -> Response:
+    safe_name = Path(str(filename)).name.replace('"', "")
+    if not safe_name:
+        safe_name = "presentation.updated.pptx"
+
+    ascii_name = safe_name.encode("ascii", "ignore").decode("ascii") or "presentation.updated.pptx"
+    content_disposition = f'attachment; filename="{ascii_name}"'
+    if safe_name != ascii_name:
+        content_disposition += f"; filename*=UTF-8''{quote(safe_name)}"
+
+    headers = {
+        "Content-Disposition": content_disposition,
+        "Content-Length": str(len(body)),
+    }
+    return Response(response=body, status=200, headers=headers, mimetype=content_type)

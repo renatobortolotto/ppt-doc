@@ -1,7 +1,4 @@
-from __future__ import annotations
-
 import argparse
-import base64
 import json
 from pathlib import Path
 
@@ -36,10 +33,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=120,
         help="Timeout da requisicao em segundos.",
-    )
-    parser.add_argument(
-        "--save-response-json",
-        help="Caminho opcional para salvar o JSON bruto da resposta.",
     )
     parser.add_argument(
         "--save-pptx",
@@ -87,43 +80,28 @@ def main() -> int:
         )
 
     print(f"HTTP {response.status_code}")
+    print(f"Content-Type: {response.headers.get('Content-Type', '<sem-content-type>')}")
 
-    try:
-        payload = response.json()
-    except ValueError:
-        print(response.text)
-        response.raise_for_status()
-        return 0
-
-    response_json_path = (
-        Path(args.save_response_json).expanduser().resolve()
-        if args.save_response_json
-        else default_output_path(xlsx_path, ".build-pptx.response.json")
-    )
-    response_json_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    print(f"Resposta salva em: {response_json_path}")
-
-    if not response.ok:
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
-        response.raise_for_status()
-
-    pptx_base64 = payload.get("pptxBase64")
-    if pptx_base64:
+    if response.ok and "application/vnd.openxmlformats-officedocument.presentationml.presentation" in response.headers.get(
+        "Content-Type",
+        "",
+    ):
         pptx_output_path = (
             Path(args.save_pptx).expanduser().resolve()
             if args.save_pptx
             else default_output_path(xlsx_path, ".build-pptx.result.pptx")
         )
-        pptx_output_path.write_bytes(base64.b64decode(pptx_base64))
+        pptx_output_path.write_bytes(response.content)
         print(f"PPTX salvo em: {pptx_output_path}")
+        return 0
 
-    summary = payload.get("summary")
-    if summary:
-        print("Resumo:")
-        print(json.dumps(summary, ensure_ascii=False, indent=2))
+    try:
+        payload = response.json()
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    except ValueError:
+        print(response.text)
+
+    response.raise_for_status()
 
     return 0
 

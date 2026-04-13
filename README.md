@@ -60,6 +60,8 @@ Helpers disponiveis:
 
 ## Teste local do endpoint
 
+No endpoint PyWeb `/api/build-pptx`, a resposta de sucesso volta como arquivo `.pptx` binario.
+
 Se voce quiser testar a rota HTTP sem usar `curl`, rode o utilitario abaixo com `requests`:
 
 ```bash
@@ -79,7 +81,6 @@ Opcoes uteis:
 - `--url http://localhost:8080/api/build-pptx`
 - `--token <JWT>`
 - `--save-pptx C:\temp\resultado.pptx`
-- `--save-response-json C:\temp\build-pptx.response.json`
 
 ## Runner local
 

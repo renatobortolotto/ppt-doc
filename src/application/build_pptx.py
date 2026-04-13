@@ -5,11 +5,17 @@ import binascii
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Mapping
+from typing import Any, Dict, Mapping, Tuple
 
 from presentation_builder import build_presentation_from_bytes, load_job_config
-from src.application.response_safety import build_error_response, serialize_build_response
+from src.application.response_safety import (
+    build_error_response,
+    build_file_response,
+    serialize_build_response,
+)
 from src.infrastructure.framework_compat import Resource, request
+
+PPTX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
 
 def _repo_root() -> Path:
@@ -27,7 +33,10 @@ def _parse_llm_payload(llm_response_bytes: bytes) -> object:
         raise ValueError("JSON da LLM invalido") from exc
 
 
-def compose_presentation_from_inputs(xlsx_bytes: bytes, llm_response_bytes: bytes) -> Dict[str, Any]:
+def _build_presentation_artifact(
+    xlsx_bytes: bytes,
+    llm_response_bytes: bytes,
+) -> Tuple[bytes, str, Any]:
     repo_root = _repo_root()
     cfg = load_job_config(repo_root)
     llm_payload = _parse_llm_payload(llm_response_bytes)
@@ -40,10 +49,24 @@ def compose_presentation_from_inputs(xlsx_bytes: bytes, llm_response_bytes: byte
     filename = Path(
         str(cfg.get("api_output_filename") or cfg.get("pptx_output") or "presentation.updated.pptx")
     ).name
+    return pptx_bytes, filename, result
+
+
+def compose_presentation_from_inputs(xlsx_bytes: bytes, llm_response_bytes: bytes) -> Dict[str, Any]:
+    pptx_bytes, filename, result = _build_presentation_artifact(xlsx_bytes, llm_response_bytes)
     return serialize_build_response(
         pptx_bytes=pptx_bytes,
         filename=filename,
         result=result,
+    )
+
+
+def compose_presentation_download_response(xlsx_bytes: bytes, llm_response_bytes: bytes):
+    pptx_bytes, filename, _result = _build_presentation_artifact(xlsx_bytes, llm_response_bytes)
+    return build_file_response(
+        body=pptx_bytes,
+        filename=filename,
+        content_type=PPTX_CONTENT_TYPE,
     )
 
 
@@ -166,12 +189,11 @@ def _extract_request_payload(request_obj: Any) -> tuple[bytes, bytes]:
     )
 
 
-def handle_build_pptx_request(request_obj: Any | None = None) -> tuple[Dict[str, Any], int]:
+def handle_build_pptx_request(request_obj: Any | None = None):
     active_request = request_obj or request
     try:
         xlsx_bytes, llm_response_bytes = _extract_request_payload(active_request)
-        response = compose_presentation_from_inputs(xlsx_bytes, llm_response_bytes)
-        return response, 200
+        return compose_presentation_download_response(xlsx_bytes, llm_response_bytes)
     except ValueError as exc:
         logging.warning("Requisicao invalida para build-pptx: %s", exc)
         return build_error_response(

@@ -27,6 +27,9 @@ def jwt_middleware(request_obj=None):
         return None
 
     active_request = request_obj or request
+    if str(getattr(active_request, "method", "")).upper() == "OPTIONS":
+        return None
+
     auth_header = (getattr(active_request, "headers", None) or {}).get("Authorization")
     if not auth_header or not auth_header.startswith("Bearer "):
         return {"error": "Token de autenticacao ausente ou invalido"}, 401

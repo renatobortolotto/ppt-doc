@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 import tempfile
-import zipfile
 
 from src.utils.xlsx_text_fields import TextFieldSpec
 
@@ -19,11 +18,9 @@ from presentation_builder import (
     build_text_mapping,
     build_text_mapping_with_failures,
     generate_chart_assets,
-    inspect_xlsx_privacy,
     load_job_config,
     load_llm_mapping_from_payload,
     resolve_path,
-    XlsxPrivacyCheckResult,
     _chart_generators,
     _persist_generated_chart_files,
     _select_chart_generators,
@@ -503,26 +500,6 @@ class TestPresentationBuilder(unittest.TestCase):
                     only_slides=(8,),
                 )
 
-    def test_build_presentation_rejects_non_public_xlsx_privacy(self):
-        with patch(
-            "presentation_builder._load_validated_workbook",
-        ) as load_workbook_mock:
-            load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
-            with patch(
-                "presentation_builder.inspect_xlsx_privacy",
-                return_value=XlsxPrivacyCheckResult(
-                    status="non_public",
-                    label="Confidencial",
-                    source="custom:MSIP_Label_123_Name",
-                ),
-            ):
-                with self.assertRaisesRegex(ValueError, "privacidade diferente de publico"):
-                    build_presentation(
-                        repo_root=self.repo_root,
-                        cfg=self.cfg,
-                        xlsx_path=self.repo_root / "testing.xlsx",
-                    )
-
     def test_build_presentation_from_bytes_rejects_empty_xlsx(self):
         with self.assertRaisesRegex(ValueError, "XLSX vazio"):
             build_presentation_from_bytes(
@@ -530,48 +507,6 @@ class TestPresentationBuilder(unittest.TestCase):
                 cfg=self.cfg,
                 xlsx_bytes=b"",
             )
-
-    def test_inspect_xlsx_privacy_detects_public_msip_label(self):
-        with tempfile.TemporaryDirectory() as td:
-            xlsx_path = Path(td) / "public.xlsx"
-            with zipfile.ZipFile(xlsx_path, "w") as zf:
-                zf.writestr(
-                    "docProps/custom.xml",
-                    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-                    <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties"
-                        xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-                      <property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="MSIP_Label_123_Name">
-                        <vt:lpwstr>Público</vt:lpwstr>
-                      </property>
-                    </Properties>""",
-                )
-
-            result = inspect_xlsx_privacy(xlsx_path, self.cfg)
-
-        self.assertEqual(result.status, "public")
-        self.assertEqual(result.label, "Público")
-        self.assertEqual(result.source, "custom:MSIP_Label_123_Name")
-
-    def test_inspect_xlsx_privacy_detects_non_public_msip_label(self):
-        with tempfile.TemporaryDirectory() as td:
-            xlsx_path = Path(td) / "private.xlsx"
-            with zipfile.ZipFile(xlsx_path, "w") as zf:
-                zf.writestr(
-                    "docProps/custom.xml",
-                    """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-                    <Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties"
-                        xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
-                      <property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="MSIP_Label_123_Name">
-                        <vt:lpwstr>Confidencial</vt:lpwstr>
-                      </property>
-                    </Properties>""",
-                )
-
-            result = inspect_xlsx_privacy(xlsx_path, self.cfg)
-
-        self.assertEqual(result.status, "non_public")
-        self.assertEqual(result.label, "Confidencial")
-        self.assertEqual(result.source, "custom:MSIP_Label_123_Name")
 
     def test_build_presentation_from_bytes_uses_api_output_filename(self):
         cfg = dict(self.cfg)

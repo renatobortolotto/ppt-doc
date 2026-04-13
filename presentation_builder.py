@@ -3,13 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import shutil
-import unicodedata
-import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Callable, Dict, Mapping, Sequence
-from xml.etree import ElementTree as ET
 
 from update_ppt import _flatten_text_payload, update_presentation
 from src.utils.slides.slide11_charts import generate_slide11_charts
@@ -75,13 +72,6 @@ class BuildPresentationResult:
     chart_failures: tuple[ChartGenerationFailure, ...]
     text_field_failures: tuple[TextFieldFailure, ...]
     applied_text_keys: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class XlsxPrivacyCheckResult:
-    status: str
-    label: str | None
-    source: str | None
 
 
 def resolve_path(repo_root: Path, path_value: str) -> Path:
@@ -344,164 +334,6 @@ def _chart_generator_slide_number(spec: ChartGeneratorSpec) -> int | None:
     return None
 
 
-def _normalize_privacy_text(value: object) -> str:
-    text = str(value or "").strip().lower()
-    text = unicodedata.normalize("NFKD", text)
-    text = "".join(ch for ch in text if not unicodedata.combining(ch))
-    return " ".join(text.split())
-
-
-def _xlsx_privacy_public_values(cfg: Mapping[str, Any]) -> set[str]:
-    raw_values = cfg.get("xlsx_privacy_public_values")
-    if isinstance(raw_values, list):
-        values = {_normalize_privacy_text(value) for value in raw_values if str(value).strip()}
-        if values:
-            return values
-    return {"publico", "public", "publica"}
-
-
-def _read_xlsx_metadata_text_properties(xlsx_path: Path) -> dict[str, str]:
-    properties: dict[str, str] = {}
-    with zipfile.ZipFile(xlsx_path) as zf:
-        if "docProps/custom.xml" in zf.namelist():
-            custom_root = ET.fromstring(zf.read("docProps/custom.xml"))
-            custom_ns = "{http://schemas.openxmlformats.org/officeDocument/2006/custom-properties}"
-            for prop in custom_root.findall(f"{custom_ns}property"):
-                name = (prop.attrib.get("name") or "").strip()
-                if not name:
-                    continue
-                text = "".join(prop.itertext()).strip()
-                if text:
-                    properties[f"custom:{name}"] = text
-
-        if "docProps/core.xml" in zf.namelist():
-            core_root = ET.fromstring(zf.read("docProps/core.xml"))
-            for child in core_root:
-                local_name = child.tag.rsplit("}", 1)[-1]
-                if local_name not in {
-                    "category",
-                    "contentStatus",
-                    "description",
-                    "keywords",
-                    "subject",
-                    "title",
-                }:
-                    continue
-                text = "".join(child.itertext()).strip()
-                if text:
-                    properties[f"core:{local_name}"] = text
-
-    return properties
-
-
-def inspect_xlsx_privacy(
-    xlsx_path: Path,
-    cfg: Mapping[str, Any],
-) -> XlsxPrivacyCheckResult:
-    public_values = _xlsx_privacy_public_values(cfg)
-    properties = _read_xlsx_metadata_text_properties(xlsx_path)
-
-    strong_name_tokens = (
-        "classification",
-        "classificacao",
-        "privacy",
-        "privacidade",
-        "sensitivity",
-        "sensibilidade",
-    )
-    fallback_name_tokens = ("label", "rotulo")
-    non_public_tokens = (
-        "confidencial",
-        "confidential",
-        "internal",
-        "interno",
-        "private",
-        "privado",
-        "restricted",
-        "restrito",
-        "sigiloso",
-    )
-
-    strong_candidates: list[tuple[str, str, bool]] = []
-    fallback_candidates: list[tuple[str, str, bool]] = []
-    for source, label in properties.items():
-        source_name = source.split(":", 1)[-1]
-        normalized_source = _normalize_privacy_text(source_name)
-        normalized_label = _normalize_privacy_text(label)
-        if not normalized_label or not any(ch.isalpha() for ch in normalized_label):
-            continue
-
-        if normalized_source.startswith("msip_label_") and normalized_source.endswith("_name"):
-            strong_candidates.append((source, label, True))
-            continue
-        if any(token in normalized_source for token in strong_name_tokens):
-            strong_candidates.append((source, label, True))
-            continue
-        if any(token in normalized_source for token in fallback_name_tokens):
-            fallback_candidates.append((source, label, False))
-            continue
-        if source.startswith("core:"):
-            fallback_candidates.append((source, label, False))
-
-    for source, label, strong in (*strong_candidates, *fallback_candidates):
-        normalized_label = _normalize_privacy_text(label)
-        if normalized_label in public_values:
-            return XlsxPrivacyCheckResult(status="public", label=label, source=source)
-        if any(token in normalized_label for token in non_public_tokens):
-            return XlsxPrivacyCheckResult(status="non_public", label=label, source=source)
-        if strong:
-            return XlsxPrivacyCheckResult(status="non_public", label=label, source=source)
-
-    return XlsxPrivacyCheckResult(status="unknown", label=None, source=None)
-
-
-def _validate_xlsx_privacy(
-    xlsx_path: Path,
-    cfg: Mapping[str, Any],
-) -> None:
-    mode = str(cfg.get("xlsx_privacy_check_mode", "error")).strip().lower()
-    if mode in {"", "off", "disabled", "none"}:
-        return
-
-    try:
-        result = inspect_xlsx_privacy(xlsx_path, cfg)
-    except zipfile.BadZipFile:
-        # O parse estrutural do XLSX e a mensagem principal já são tratados em _validate_xlsx_path.
-        return
-    except ET.ParseError as exc:
-        logging.warning(
-            "Nao foi possivel interpretar os metadados de privacidade do XLSX %s: %s",
-            xlsx_path,
-            exc,
-        )
-        return
-
-    if result.status == "public":
-        logging.info(
-            "Privacidade do XLSX validada como publico via %s=%r",
-            result.source,
-            result.label,
-        )
-        return
-
-    if result.status == "non_public":
-        message = (
-            "Arquivo Excel com privacidade diferente de publico detectada: "
-            f"{result.label!r} ({result.source}). "
-            "Envie um XLSX classificado como Publico."
-        )
-        if mode == "warn":
-            logging.warning(message)
-            return
-        raise ValueError(message)
-
-    logging.info(
-        "Nenhum metadado reconhecido de privacidade/classificacao foi encontrado no XLSX %s; "
-        "seguindo em frente.",
-        xlsx_path,
-    )
-
-
 def _select_chart_generators(
     only_slides: Sequence[int] | None,
 ) -> tuple[tuple[ChartGeneratorSpec, ...], tuple[int, ...]]:
@@ -639,7 +471,6 @@ def build_presentation(
         raise FileNotFoundError(f"XLSX nao encontrado: {xlsx_path}")
 
     _validate_xlsx_path(xlsx_path)
-    _validate_xlsx_privacy(xlsx_path, cfg)
 
     normalized_only_slides = tuple(dict.fromkeys(int(slide) for slide in only_slides)) if only_slides else None
     if normalized_only_slides and skip_charts:

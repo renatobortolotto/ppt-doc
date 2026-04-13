@@ -4,7 +4,5 @@
   "images_dir": ".",
   "allow_placeholder_text": false,
   "text_fields_config": "config/text_fields.json",
-  "llm_response_json": "llm_response.latest.json",
-  "xlsx_privacy_check_mode": "error",
-  "xlsx_privacy_public_values": ["Público", "Publico", "Public"]
+  "llm_response_json": "llm_response.latest.json"
 }

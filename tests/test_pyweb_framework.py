@@ -9,6 +9,7 @@ from src.application.build_pptx import (
     handle_build_pptx_request,
 )
 from src.controller.app import app
+from src.infrastructure.config import prefix
 from src.infrastructure.framework_compat import Resource
 from src.routes import create_routes
 
@@ -36,16 +37,51 @@ class _FakeRequest:
         return self._json_payload
 
 
+def _expected_route_path() -> str:
+    normalized_prefix = prefix.rstrip("/")
+    return f"{normalized_prefix}/build-pptx" if normalized_prefix else "/build-pptx"
+
+
+def _registered_build_pptx_handlers():
+    full_path = _expected_route_path()
+
+    registered_routes = getattr(app, "registered_routes", None)
+    if isinstance(registered_routes, list):
+        return [
+            route["handler"]
+            for route in registered_routes
+            if isinstance(route, dict) and route.get("path") == full_path
+        ]
+
+    url_map = getattr(app, "url_map", None)
+    view_functions = getattr(app, "view_functions", None)
+    if url_map is None or view_functions is None:
+        raise AssertionError("Aplicacao nao expoe registered_routes nem url_map/view_functions")
+
+    handlers = []
+    for rule in url_map.iter_rules():
+        if rule.rule != full_path:
+            continue
+        view = view_functions.get(rule.endpoint)
+        handlers.append(getattr(view, "view_class", view))
+    return handlers
+
+
 class TestPyWebFramework(unittest.TestCase):
     def test_create_routes_registers_build_pptx_resource(self):
-        app.registered_routes.clear()
+        create_routes()
+        handlers = _registered_build_pptx_handlers()
 
+        self.assertGreaterEqual(len(handlers), 1)
+        self.assertIs(handlers[0], BuildPptxResource)
+        self.assertTrue(issubclass(handlers[0], Resource))
+
+    def test_create_routes_is_idempotent(self):
+        create_routes()
         create_routes()
 
-        self.assertEqual(len(app.registered_routes), 1)
-        self.assertEqual(app.registered_routes[0]["path"], "/api/build-pptx")
-        self.assertIs(app.registered_routes[0]["handler"], BuildPptxResource)
-        self.assertTrue(issubclass(app.registered_routes[0]["handler"], Resource))
+        handlers = _registered_build_pptx_handlers()
+        self.assertEqual(sum(handler is BuildPptxResource for handler in handlers), 1)
 
     def test_build_pptx_resource_post_delegates_to_request_handler(self):
         resource = BuildPptxResource()

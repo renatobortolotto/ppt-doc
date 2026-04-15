@@ -8,6 +8,18 @@ from openpyxl.utils.cell import range_boundaries
 
 from src.utils.charts_common import close_figure
 
+SLIDE8_FONT_SCALE = 2.18
+SLIDE8_TRIMESTRES_DELTA_PAIRS = ((0, 2), (1, 2))
+SLIDE8_TRIMESTRES_DELTA_BRACKET_COLORS = ("#123a7a", "#2f2f2f")
+SLIDE8_TRIMESTRES_DELTA_LABEL_X_FRACTIONS = (0.30, 0.50)
+SLIDE8_TRIMESTRES_BAR_WIDTH_SCALE = 0.65
+SLIDE8_TRIMESTRES_GAP_SCALE = 0.5
+SLIDE8_LEGEND_MAX_LINE_LEN = 10
+SLIDE8_9M_BAR_WIDTH_SCALE = 0.5
+SLIDE8_9M_GAP_SCALE = 0.5
+SLIDE8_MFB_TRIMESTRES_X_TICK_PAD = 16
+SLIDE8_MFB_TRIMESTRES_LABEL_BBOX_SERIES = ("Mercado",)
+
 
 def _text_color_for_bg_rgba(rgba) -> str:
     r, g, b = float(rgba[0]), float(rgba[1]), float(rgba[2])
@@ -123,6 +135,13 @@ def _plot_stacked_vertical(
     bold_last_bar: bool = True,
     bold_text: bool = True,
     inline_left_legend: bool = True,
+    delta_pairs: tuple[tuple[int, int], ...] = (),
+    delta_bracket_colors: tuple[str, ...] = (),
+    delta_label_x_fractions: tuple[float, ...] = (),
+    bar_width_scale: float = 1.0,
+    gap_scale: float = 1.0,
+    x_tick_pad: float = 8.0,
+    segment_label_bbox_series_names: tuple[str, ...] = (),
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import to_rgba
@@ -142,8 +161,27 @@ def _plot_stacked_vertical(
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    x = np.arange(n, dtype=float)
-    bar_width = 0.62
+    base_step = 1.0
+    base_bar_width = 0.62
+    try:
+        width_scale = float(bar_width_scale)
+    except Exception:
+        width_scale = 1.0
+    if not np.isfinite(width_scale) or width_scale <= 0:
+        width_scale = 1.0
+
+    try:
+        effective_gap_scale = float(gap_scale)
+    except Exception:
+        effective_gap_scale = 1.0
+    if not np.isfinite(effective_gap_scale) or effective_gap_scale < 0:
+        effective_gap_scale = 1.0
+
+    bar_width = base_bar_width * width_scale
+    base_gap = max(base_step - base_bar_width, 0.0)
+    step = bar_width + base_gap * effective_gap_scale
+    x = np.arange(n, dtype=float) * step
+    segment_centers: list[list[float]] = [[] for _ in range(m)]
 
     bottom = np.zeros(n, dtype=float)
     containers = []
@@ -168,15 +206,24 @@ def _plot_stacked_vertical(
         ax.set_xlim(float(x.min()) - 1.85, float(x.max()) + 0.75)
 
     # Segment labels: show value + % of bar total, centered inside each segment.
+    bbox_series_names = {
+        (name or "").strip().lower()
+        for name in segment_label_bbox_series_names
+        if str(name).strip()
+    }
     for j, cont in enumerate(containers):
         face = colors[j % len(colors)]
         rgba = to_rgba(face)
         txt_color = _text_color_for_bg_rgba(rgba)
+        series_name_norm = (series_names[j] or "").strip().lower()
 
         for i, rect in enumerate(cont.patches):
             seg_val = float(values[i, j])
             if not np.isfinite(seg_val) or abs(seg_val) < 1e-12:
+                segment_centers[j].append(float("nan"))
                 continue
+            yc = rect.get_y() + rect.get_height() / 2
+            segment_centers[j].append(float(yc))
             total = float(totals[i])
             if not np.isfinite(total) or abs(total) < 1e-12:
                 pct_txt = ""
@@ -189,6 +236,15 @@ def _plot_stacked_vertical(
             if show_segment_pct and pct_txt:
                 label = f"{val_txt}\n({pct_txt})"
 
+            text_bbox = None
+            if series_name_norm in bbox_series_names:
+                text_bbox = {
+                    "boxstyle": "round,pad=0.18",
+                    "facecolor": face,
+                    "edgecolor": face,
+                    "linewidth": 0.0,
+                }
+
             ax.text(
                 rect.get_x() + rect.get_width() / 2,
                 rect.get_y() + rect.get_height() / 2,
@@ -200,6 +256,7 @@ def _plot_stacked_vertical(
                 fontweight="bold" if (bold_text and bold_last_bar and i == n - 1) else "normal",
                 zorder=5,
                 clip_on=False,
+                bbox=text_bbox,
             )
 
     # Totals on top
@@ -221,51 +278,46 @@ def _plot_stacked_vertical(
 
     # Inline legend on the left: color swatch + series name, vertically aligned with a reference bar.
     if inline_left_legend and m:
-        # Prefer the last bar (usually the most relevant). If a segment is zero there,
-        # fall back to the first bar where that segment is non-zero.
-        ref_i = n - 1
-        # Keep legend outside the bar area, but close to it.
-        # Text wrapping handles long labels.
-        x_swatch = float(x.min()) - 1.55
+        max_name_len = max((len(str(name).strip()) for name in series_names), default=1)
+        left_margin = max(1.65, 0.80 + max_name_len * 0.05)
+        x_text = float(x[0]) - bar_width / 2.0 - 0.20
+        connector_start = x_text + 0.06
+        connector_end = float(x[0]) - bar_width / 2.0 - 0.05
 
         for j, name in enumerate(series_names):
-            seg_val = float(values[ref_i, j])
-            i_for_pos = ref_i
-            if not np.isfinite(seg_val) or abs(seg_val) < 1e-12:
-                for ii in range(n):
-                    vv = float(values[ii, j])
-                    if np.isfinite(vv) and abs(vv) > 1e-12:
-                        seg_val = vv
-                        i_for_pos = ii
+            y_ref = segment_centers[j][0] if segment_centers[j] else float("nan")
+            if not np.isfinite(y_ref):
+                for yc in segment_centers[j]:
+                    if np.isfinite(yc):
+                        y_ref = yc
                         break
-
-            # Compute the center of this segment within the stacked bar at i_for_pos.
-            y0 = float(np.nansum(values[i_for_pos, :j]))
-            yc = y0 + float(seg_val) / 2.0
+            if not np.isfinite(y_ref):
+                continue
 
             color = colors[j % len(colors)]
-            ax.scatter(
-                [x_swatch],
-                [yc],
-                s=140.0 * float(font_scale),
-                marker="s",
-                color=color,
-                edgecolors="none",
-                zorder=6,
-                clip_on=False,
-            )
-            wrapped = _wrap_words(str(name), max_line_len=16)
+            if connector_end > connector_start:
+                ax.plot(
+                    [connector_start, connector_end],
+                    [float(y_ref), float(y_ref)],
+                    color=color,
+                    linewidth=2.2,
+                    solid_capstyle="round",
+                    zorder=6,
+                    clip_on=False,
+                )
             ax.text(
-                x_swatch + 0.16,
-                yc,
-                wrapped,
-                ha="left",
+                x_text,
+                float(y_ref),
+                _wrap_words(str(name), max_line_len=SLIDE8_LEGEND_MAX_LINE_LEN),
+                ha="right",
                 va="center",
                 fontsize=10.0 * float(font_scale),
                 color="#2f2f2f",
-                zorder=6,
+                zorder=7,
                 clip_on=False,
             )
+
+        ax.set_xlim(float(x.min()) - (left_margin + 0.10), float(x.max()) + 0.75)
 
     # Brackets / deltas between totals
     delta_label_top: float | None = None
@@ -274,24 +326,47 @@ def _plot_stacked_vertical(
         offset_y = max(abs_max * 0.06, 0.5)
         bracket_h = max(abs_max * 0.03, 0.5)
 
-        for level, i in enumerate(range(1, n)):
-            prev = float(totals[i - 1])
-            curr = float(totals[i])
+        pairs = list(delta_pairs) if delta_pairs else [(i - 1, i) for i in range(1, n)]
+
+        def _norm_index(idx: int) -> int:
+            return idx + n if idx < 0 else idx
+
+        norm_pairs: list[tuple[int, int]] = []
+        for prev_i, curr_i in pairs:
+            pi = _norm_index(int(prev_i))
+            ci = _norm_index(int(curr_i))
+            if pi < 0 or pi >= n or ci < 0 or ci >= n or pi == ci:
+                continue
+            norm_pairs.append((pi, ci))
+
+        if delta_pairs:
+            norm_pairs_sorted = norm_pairs
+        else:
+            norm_pairs_sorted = sorted(norm_pairs, key=lambda p: (abs(p[1] - p[0]), p[0], p[1]))
+
+        for level, (pi, ci) in enumerate(norm_pairs_sorted):
+            prev = float(totals[pi])
+            curr = float(totals[ci])
             if not np.isfinite(prev) or not np.isfinite(curr) or prev == 0:
                 continue
             pct = (curr / prev - 1.0) * 100.0
             label = f"{pct:+.1f}%".replace(".", ",")
 
-            x1 = float(x[i - 1])
-            x2 = float(x[i])
+            x1 = float(x[pi])
+            x2 = float(x[ci])
             top = max(prev, curr)
             y_anchor = top + offset_y + level * (bracket_h + offset_y * 0.9)
+            bracket_color = "#2f2f2f"
+            if level < len(delta_bracket_colors):
+                candidate_color = str(delta_bracket_colors[level]).strip()
+                if candidate_color:
+                    bracket_color = candidate_color
 
             if show_delta_bracket:
                 ax.plot(
                     [x1, x1, x2, x2],
                     [y_anchor, y_anchor + bracket_h, y_anchor + bracket_h, y_anchor],
-                    color="#2f2f2f",
+                    color=bracket_color,
                     linewidth=1.2,
                     solid_capstyle="round",
                     zorder=3,
@@ -300,8 +375,19 @@ def _plot_stacked_vertical(
             else:
                 text_y = y_anchor
 
+            label_x_fraction = 0.5
+            if level < len(delta_label_x_fractions):
+                try:
+                    candidate_fraction = float(delta_label_x_fractions[level])
+                except Exception:
+                    candidate_fraction = 0.5
+                if np.isfinite(candidate_fraction):
+                    label_x_fraction = min(max(candidate_fraction, 0.0), 1.0)
+
+            text_x = x1 + (x2 - x1) * label_x_fraction
+
             ax.text(
-                (x1 + x2) / 2.0,
+                text_x,
                 text_y,
                 label,
                 ha="center",
@@ -324,6 +410,7 @@ def _plot_stacked_vertical(
     for s in ("left", "right", "top"):
         ax.spines[s].set_visible(False)
     ax.spines["bottom"].set_visible(True)
+    ax.tick_params(axis="x", bottom=False, pad=x_tick_pad)
     ax.tick_params(axis="y", left=False, labelleft=False)
     ax.grid(False)
     ax.margins(x=0.05, y=0.12)
@@ -424,12 +511,17 @@ def generate_slide8_charts(
         values=values,
         output_path=out13,
         colors=colors,
-        font_scale=1.3,
+        font_scale=SLIDE8_FONT_SCALE,
         show_delta_bracket=True,
         show_delta_pct=True,
         bold_last_bar=True,
         bold_text=True,
         inline_left_legend=True,
+        delta_pairs=SLIDE8_TRIMESTRES_DELTA_PAIRS,
+        delta_bracket_colors=SLIDE8_TRIMESTRES_DELTA_BRACKET_COLORS,
+        delta_label_x_fractions=SLIDE8_TRIMESTRES_DELTA_LABEL_X_FRACTIONS,
+        bar_width_scale=SLIDE8_TRIMESTRES_BAR_WIDTH_SCALE,
+        gap_scale=SLIDE8_TRIMESTRES_GAP_SCALE,
     )
     generated.append(out13)
 
@@ -442,12 +534,14 @@ def generate_slide8_charts(
         values=values,
         output_path=out14,
         colors=colors,
-        font_scale=1.3,
+        font_scale=SLIDE8_FONT_SCALE,
         show_delta_bracket=True,
         show_delta_pct=True,
         bold_last_bar=False,
         bold_text=False,
         inline_left_legend=True,
+        bar_width_scale=SLIDE8_9M_BAR_WIDTH_SCALE,
+        gap_scale=SLIDE8_9M_GAP_SCALE,
     )
     generated.append(out14)
 
@@ -468,12 +562,19 @@ def generate_slide8_charts(
         values=values,
         output_path=out15,
         colors=colors,
-        font_scale=1.3,
+        font_scale=SLIDE8_FONT_SCALE,
         show_delta_bracket=True,
         show_delta_pct=True,
         bold_last_bar=True,
         bold_text=True,
         inline_left_legend=True,
+        delta_pairs=SLIDE8_TRIMESTRES_DELTA_PAIRS,
+        delta_bracket_colors=SLIDE8_TRIMESTRES_DELTA_BRACKET_COLORS,
+        delta_label_x_fractions=SLIDE8_TRIMESTRES_DELTA_LABEL_X_FRACTIONS,
+        bar_width_scale=SLIDE8_TRIMESTRES_BAR_WIDTH_SCALE,
+        gap_scale=SLIDE8_TRIMESTRES_GAP_SCALE,
+        x_tick_pad=SLIDE8_MFB_TRIMESTRES_X_TICK_PAD,
+        segment_label_bbox_series_names=SLIDE8_MFB_TRIMESTRES_LABEL_BBOX_SERIES,
     )
     generated.append(out15)
 
@@ -493,13 +594,15 @@ def generate_slide8_charts(
         values=values,
         output_path=out16,
         colors=colors,
-        font_scale=1.3,
+        font_scale=SLIDE8_FONT_SCALE,
         show_delta_bracket=True,
         show_delta_pct=True,
         show_segment_pct=False,
         bold_last_bar=False,
         bold_text=False,
         inline_left_legend=True,
+        bar_width_scale=SLIDE8_9M_BAR_WIDTH_SCALE,
+        gap_scale=SLIDE8_9M_GAP_SCALE,
     )
     generated.append(out16)
 
@@ -520,13 +623,18 @@ def generate_slide8_charts(
         values=values,
         output_path=out17,
         colors=colors,
-        font_scale=1.3,
+        font_scale=SLIDE8_FONT_SCALE,
         show_delta_bracket=True,
         show_delta_pct=True,
         show_segment_pct=False,
         bold_last_bar=True,
         bold_text=True,
         inline_left_legend=True,
+        delta_pairs=SLIDE8_TRIMESTRES_DELTA_PAIRS,
+        delta_bracket_colors=SLIDE8_TRIMESTRES_DELTA_BRACKET_COLORS,
+        delta_label_x_fractions=SLIDE8_TRIMESTRES_DELTA_LABEL_X_FRACTIONS,
+        bar_width_scale=SLIDE8_TRIMESTRES_BAR_WIDTH_SCALE,
+        gap_scale=SLIDE8_TRIMESTRES_GAP_SCALE,
     )
     generated.append(out17)
 
@@ -546,12 +654,14 @@ def generate_slide8_charts(
         values=values,
         output_path=out18,
         colors=colors,
-        font_scale=1.3,
+        font_scale=SLIDE8_FONT_SCALE,
         show_delta_bracket=True,
         show_delta_pct=True,
         bold_last_bar=False,
         bold_text=False,
         inline_left_legend=True,
+        bar_width_scale=SLIDE8_9M_BAR_WIDTH_SCALE,
+        gap_scale=SLIDE8_9M_GAP_SCALE,
     )
     generated.append(out18)
 

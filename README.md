@@ -82,6 +82,30 @@ Opcoes uteis:
 - `--token <JWT>`
 - `--save-pptx C:\temp\resultado.pptx`
 
+## Geracao isolada dos graficos
+
+Se voce quiser validar somente os PNGs na estrutura corporativa, sem passar pelo endpoint nem atualizar o PPT, use:
+
+```bash
+cd /home/renato/projetos/double-projects/ppt-doc
+MPLCONFIGDIR=/tmp/matplotlib ./.venv/bin/python scripts/generate_chart_assets.py --xlsx testing.xlsx --output-dir ./charts-out
+```
+
+No Windows/PowerShell:
+
+```powershell
+cd C:\caminho\para\ppt-doc
+.\.venv\Scripts\python.exe scripts\generate_chart_assets.py --xlsx testing.xlsx --output-dir .\charts-out
+```
+
+Opcoes uteis:
+
+- `--only-slides 4,8,11,12`
+- `--strict`
+- `--summary-json ./charts-out/summary.json`
+
+Se `--output-dir` for omitido, o script usa `images_dir` de `config/job_config.json`.
+
 ## Runner local
 
 Se voce quer rodar localmente sem depender do runtime corporativo, use `run_fixed_job.py`.

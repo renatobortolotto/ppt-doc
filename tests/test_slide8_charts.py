@@ -10,6 +10,7 @@ from openpyxl import Workbook
 from src.utils.slides.slide8_charts import (
     SLIDE8_9M_BAR_WIDTH_SCALE,
     SLIDE8_9M_GAP_SCALE,
+    SLIDE8_DELTA_OFFSET_SCALE,
     SLIDE8_FONT_SCALE,
     SLIDE8_LEGEND_MAX_LINE_LEN,
     SLIDE8_MFB_TRIMESTRES_LABEL_BBOX_SERIES,
@@ -186,6 +187,7 @@ class TestSlide8Charts(unittest.TestCase):
             self.assertEqual(kwargs["delta_label_x_fractions"], SLIDE8_TRIMESTRES_DELTA_LABEL_X_FRACTIONS)
             self.assertEqual(kwargs["bar_width_scale"], SLIDE8_TRIMESTRES_BAR_WIDTH_SCALE)
             self.assertEqual(kwargs["gap_scale"], SLIDE8_TRIMESTRES_GAP_SCALE)
+            self.assertEqual(kwargs["delta_offset_scale"], SLIDE8_DELTA_OFFSET_SCALE)
             if index == 2:
                 self.assertEqual(kwargs["x_tick_pad"], SLIDE8_MFB_TRIMESTRES_X_TICK_PAD)
                 self.assertEqual(kwargs["segment_label_bbox_series_names"], SLIDE8_MFB_TRIMESTRES_LABEL_BBOX_SERIES)
@@ -198,6 +200,7 @@ class TestSlide8Charts(unittest.TestCase):
             self.assertEqual(kwargs["font_scale"], SLIDE8_FONT_SCALE)
             self.assertEqual(kwargs["bar_width_scale"], SLIDE8_9M_BAR_WIDTH_SCALE)
             self.assertEqual(kwargs["gap_scale"], SLIDE8_9M_GAP_SCALE)
+            self.assertEqual(kwargs["delta_offset_scale"], SLIDE8_DELTA_OFFSET_SCALE)
             self.assertNotIn("delta_pairs", kwargs)
             self.assertNotIn("delta_bracket_colors", kwargs)
             self.assertNotIn("delta_label_x_fractions", kwargs)
@@ -244,6 +247,14 @@ class TestSlide8Charts(unittest.TestCase):
             self.assertEqual([text.get_text() for text in delta_texts], ["+50,0%", "+25,0%"])
             bracket_lines = [line for line in ax.lines if len(line.get_xdata()) == 4]
             self.assertEqual([line.get_color() for line in bracket_lines[:2]], list(SLIDE8_TRIMESTRES_DELTA_BRACKET_COLORS))
+            top_labels = [
+                text for text in ax.texts
+                if text.get_text() in {"100", "120", "150"}
+            ]
+            self.assertTrue(top_labels)
+            highest_top_label_y = max(text.get_position()[1] for text in top_labels)
+            lowest_bracket_y = min(max(line.get_ydata()) for line in bracket_lines[:2])
+            self.assertGreater(lowest_bracket_y, highest_top_label_y)
 
             expected_legend_texts = {
                 _wrap_words("Margem Financeira Bruta", max_line_len=SLIDE8_LEGEND_MAX_LINE_LEN),

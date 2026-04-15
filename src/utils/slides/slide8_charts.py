@@ -17,6 +17,7 @@ SLIDE8_TRIMESTRES_GAP_SCALE = 0.5
 SLIDE8_LEGEND_MAX_LINE_LEN = 10
 SLIDE8_9M_BAR_WIDTH_SCALE = 0.5
 SLIDE8_9M_GAP_SCALE = 0.5
+SLIDE8_DELTA_OFFSET_SCALE = 1.4
 SLIDE8_MFB_TRIMESTRES_X_TICK_PAD = 16
 SLIDE8_MFB_TRIMESTRES_LABEL_BBOX_SERIES = ("Mercado",)
 
@@ -140,6 +141,7 @@ def _plot_stacked_vertical(
     delta_label_x_fractions: tuple[float, ...] = (),
     bar_width_scale: float = 1.0,
     gap_scale: float = 1.0,
+    delta_offset_scale: float = 1.0,
     x_tick_pad: float = 8.0,
     segment_label_bbox_series_names: tuple[str, ...] = (),
 ) -> None:
@@ -260,12 +262,15 @@ def _plot_stacked_vertical(
             )
 
     # Totals on top
+    total_label_tops: list[float] = []
     for i, total in enumerate(totals):
         if not np.isfinite(total):
             continue
+        y_label = float(total) + max(abs(float(total)) * 0.03, 0.28)
+        total_label_tops.append(y_label)
         ax.text(
             float(x[i]),
-            float(total),
+            y_label,
             f"{float(total):,.0f}".replace(",", "."),
             ha="center",
             va="bottom",
@@ -325,6 +330,15 @@ def _plot_stacked_vertical(
         abs_max = float(np.nanmax(np.abs(totals))) if np.isfinite(np.nanmax(np.abs(totals))) else 0.0
         offset_y = max(abs_max * 0.06, 0.5)
         bracket_h = max(abs_max * 0.03, 0.5)
+        try:
+            effective_delta_offset_scale = float(delta_offset_scale)
+        except Exception:
+            effective_delta_offset_scale = 1.0
+        if not np.isfinite(effective_delta_offset_scale) or effective_delta_offset_scale <= 0:
+            effective_delta_offset_scale = 1.0
+        offset_y *= effective_delta_offset_scale
+        top_labels_max = max(total_label_tops) if total_label_tops else float(np.nanmax(totals))
+        top_base = top_labels_max + offset_y
 
         pairs = list(delta_pairs) if delta_pairs else [(i - 1, i) for i in range(1, n)]
 
@@ -354,8 +368,7 @@ def _plot_stacked_vertical(
 
             x1 = float(x[pi])
             x2 = float(x[ci])
-            top = max(prev, curr)
-            y_anchor = top + offset_y + level * (bracket_h + offset_y * 0.9)
+            y_anchor = top_base + level * (bracket_h + offset_y * 0.9)
             bracket_color = "#2f2f2f"
             if level < len(delta_bracket_colors):
                 candidate_color = str(delta_bracket_colors[level]).strip()
@@ -522,6 +535,7 @@ def generate_slide8_charts(
         delta_label_x_fractions=SLIDE8_TRIMESTRES_DELTA_LABEL_X_FRACTIONS,
         bar_width_scale=SLIDE8_TRIMESTRES_BAR_WIDTH_SCALE,
         gap_scale=SLIDE8_TRIMESTRES_GAP_SCALE,
+        delta_offset_scale=SLIDE8_DELTA_OFFSET_SCALE,
     )
     generated.append(out13)
 
@@ -542,6 +556,7 @@ def generate_slide8_charts(
         inline_left_legend=True,
         bar_width_scale=SLIDE8_9M_BAR_WIDTH_SCALE,
         gap_scale=SLIDE8_9M_GAP_SCALE,
+        delta_offset_scale=SLIDE8_DELTA_OFFSET_SCALE,
     )
     generated.append(out14)
 
@@ -573,6 +588,7 @@ def generate_slide8_charts(
         delta_label_x_fractions=SLIDE8_TRIMESTRES_DELTA_LABEL_X_FRACTIONS,
         bar_width_scale=SLIDE8_TRIMESTRES_BAR_WIDTH_SCALE,
         gap_scale=SLIDE8_TRIMESTRES_GAP_SCALE,
+        delta_offset_scale=SLIDE8_DELTA_OFFSET_SCALE,
         x_tick_pad=SLIDE8_MFB_TRIMESTRES_X_TICK_PAD,
         segment_label_bbox_series_names=SLIDE8_MFB_TRIMESTRES_LABEL_BBOX_SERIES,
     )
@@ -603,6 +619,7 @@ def generate_slide8_charts(
         inline_left_legend=True,
         bar_width_scale=SLIDE8_9M_BAR_WIDTH_SCALE,
         gap_scale=SLIDE8_9M_GAP_SCALE,
+        delta_offset_scale=SLIDE8_DELTA_OFFSET_SCALE,
     )
     generated.append(out16)
 
@@ -635,6 +652,7 @@ def generate_slide8_charts(
         delta_label_x_fractions=SLIDE8_TRIMESTRES_DELTA_LABEL_X_FRACTIONS,
         bar_width_scale=SLIDE8_TRIMESTRES_BAR_WIDTH_SCALE,
         gap_scale=SLIDE8_TRIMESTRES_GAP_SCALE,
+        delta_offset_scale=SLIDE8_DELTA_OFFSET_SCALE,
     )
     generated.append(out17)
 
@@ -662,6 +680,7 @@ def generate_slide8_charts(
         inline_left_legend=True,
         bar_width_scale=SLIDE8_9M_BAR_WIDTH_SCALE,
         gap_scale=SLIDE8_9M_GAP_SCALE,
+        delta_offset_scale=SLIDE8_DELTA_OFFSET_SCALE,
     )
     generated.append(out18)
 

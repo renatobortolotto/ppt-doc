@@ -24,6 +24,13 @@ SLIDE4_DONUT_ROW_SPECS: tuple[tuple[str, str, tuple[int, ...]], ...] = (
     ("Atacado", "Pequenas e Medias Empresas (PME)", (30,)),
 )
 
+SLIDE4_BAR_FONT_SCALE = 2.1
+SLIDE4_BAR_WIDTH_SCALE = 0.5
+SLIDE4_BAR_GAP_SCALE = 0.5
+SLIDE4_TRIMESTRES_DELTA_OFFSET_SCALE = 1.25
+SLIDE4_9M_DELTA_OFFSET_SCALE = 1.5625
+SLIDE4_TRIMESTRES_DELTA_BRACKET_COLORS = ("#123a7a", "#2f2f2f")
+
 
 def _extract_slide4_donut_series(ws, *, source_range: str) -> tuple[list[str], list[str], list[float]]:
     min_col, min_row, max_col, max_row = range_boundaries(source_range)
@@ -101,8 +108,14 @@ def generate_slide4_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
             bar_color="#123a7a",
             show_delta_pct=True,
             show_delta_bracket=True,
-            delta_pairs=((0, 1), (1, 2)),
-            font_scale=1.5,
+            # O primeiro bloco compara o inicio da serie com o valor mais atual.
+            delta_pairs=((0, 2), (1, 2)),
+            delta_bracket_colors=SLIDE4_TRIMESTRES_DELTA_BRACKET_COLORS,
+            delta_label_x_fractions=(0.30, 0.50),
+            bar_width_scale=SLIDE4_BAR_WIDTH_SCALE,
+            gap_scale=SLIDE4_BAR_GAP_SCALE,
+            delta_offset_scale=SLIDE4_TRIMESTRES_DELTA_OFFSET_SCALE,
+            font_scale=SLIDE4_BAR_FONT_SCALE,
             output_path=output_dir / "11_pizza_trimestres.png",
         )
     )
@@ -122,7 +135,11 @@ def generate_slide4_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
             show_delta_pct=True,
             show_delta_bracket=True,
             fixed_slot_count=9,
-            font_scale=1.5,
+            delta_pairs=((0, 1),),
+            bar_width_scale=SLIDE4_BAR_WIDTH_SCALE,
+            gap_scale=SLIDE4_BAR_GAP_SCALE,
+            delta_offset_scale=SLIDE4_9M_DELTA_OFFSET_SCALE,
+            font_scale=SLIDE4_BAR_FONT_SCALE,
             output_path=output_dir / "12_pizza_9m.png",
         )
     )

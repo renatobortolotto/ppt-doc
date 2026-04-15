@@ -88,6 +88,10 @@ class ExcelBarChartSpec:
     show_delta_pct: bool = False
     show_delta_bracket: bool = False
     delta_pairs: Tuple[Tuple[int, int], ...] = ()
+    # Optional: bracket stroke color per delta pair; label color stays unchanged.
+    delta_bracket_colors: Tuple[str, ...] = ()
+    # Optional: horizontal label position per delta pair, from 0.0 (left) to 1.0 (right).
+    delta_label_x_fractions: Tuple[float, ...] = ()
     fixed_slot_count: Optional[int] = None
     # Optional: format bar-top values with decimals (None keeps existing 0-decimal format)
     value_decimals: Optional[int] = None
@@ -97,6 +101,10 @@ class ExcelBarChartSpec:
     value_decimal_comma: bool = False
     # Optional: multiply computed bar width (e.g. 0.70 for 30% thinner)
     bar_width_scale: float = 1.0
+    # Optional: multiply only the empty gap between bars, preserving bar thickness.
+    gap_scale: float = 1.0
+    # Optional: move delta brackets/text farther from the bar tops.
+    delta_offset_scale: float = 1.0
     # Optional: scale all font sizes (e.g. 1.5 to increase by ~50%)
     font_scale: float = 1.0
 
@@ -345,6 +353,15 @@ def plot_bar_from_excel(spec: ExcelBarChartSpec) -> Tuple[plt.Figure, plt.Axes]:
     if is_9m_two_bars:
         step = 0.48
         x_pad = 0.35
+    try:
+        gap_scale = float(spec.gap_scale)
+    except Exception:
+        gap_scale = 1.0
+    if not np.isfinite(gap_scale) or gap_scale < 0:
+        gap_scale = 1.0
+    if n >= 2:
+        gap = max(float(step) - float(width), 0.0)
+        step = float(width) + gap * gap_scale
     x_pos = np.arange(n, dtype=float) * step
 
     bars = ax.bar(x_pos, values, width=width, color=colors, edgecolor="none")
@@ -376,6 +393,13 @@ def plot_bar_from_excel(spec: ExcelBarChartSpec) -> Tuple[plt.Figure, plt.Axes]:
         abs_max = float(np.nanmax(np.abs(vals))) if np.isfinite(np.nanmax(np.abs(vals))) else 0.0
         offset_y = max(abs_max * 0.06, 0.5)
         bracket_h = max(abs_max * 0.03, 0.5)
+        try:
+            delta_offset_scale = float(spec.delta_offset_scale)
+        except Exception:
+            delta_offset_scale = 1.0
+        if not np.isfinite(delta_offset_scale) or delta_offset_scale <= 0:
+            delta_offset_scale = 1.0
+        offset_y *= delta_offset_scale
 
         pairs = list(spec.delta_pairs) if spec.delta_pairs else [(i - 1, i) for i in range(1, n)]
 
@@ -390,7 +414,10 @@ def plot_bar_from_excel(spec: ExcelBarChartSpec) -> Tuple[plt.Figure, plt.Axes]:
                 continue
             norm_pairs.append((pi, ci))
 
-        norm_pairs_sorted = sorted(norm_pairs, key=lambda p: (abs(p[1] - p[0]), p[0], p[1]))
+        if spec.delta_pairs:
+            norm_pairs_sorted = norm_pairs
+        else:
+            norm_pairs_sorted = sorted(norm_pairs, key=lambda p: (abs(p[1] - p[0]), p[0], p[1]))
 
         for level, (pi, ci) in enumerate(norm_pairs_sorted):
             prev = vals[pi]
@@ -406,12 +433,17 @@ def plot_bar_from_excel(spec: ExcelBarChartSpec) -> Tuple[plt.Figure, plt.Axes]:
             top = max(prev, curr)
             base = top + offset_y if top >= 0 else top - offset_y
             y_anchor = base + level * (bracket_h + offset_y * 0.9)
+            bracket_color = "#2f2f2f"
+            if level < len(spec.delta_bracket_colors):
+                candidate_color = str(spec.delta_bracket_colors[level]).strip()
+                if candidate_color:
+                    bracket_color = candidate_color
 
             if spec.show_delta_bracket:
                 ax.plot(
                     [x1, x1, x2, x2],
                     [y_anchor, y_anchor + bracket_h, y_anchor + bracket_h, y_anchor],
-                    color="#2f2f2f",
+                    color=bracket_color,
                     linewidth=1.2,
                     solid_capstyle="round",
                     zorder=4,
@@ -420,8 +452,19 @@ def plot_bar_from_excel(spec: ExcelBarChartSpec) -> Tuple[plt.Figure, plt.Axes]:
             else:
                 text_y = y_anchor
 
+            label_x_fraction = 0.5
+            if level < len(spec.delta_label_x_fractions):
+                try:
+                    candidate_fraction = float(spec.delta_label_x_fractions[level])
+                except Exception:
+                    candidate_fraction = 0.5
+                if np.isfinite(candidate_fraction):
+                    label_x_fraction = min(max(candidate_fraction, 0.0), 1.0)
+
+            text_x = x1 + (x2 - x1) * label_x_fraction
+
             ax.text(
-                (x1 + x2) / 2.0,
+                text_x,
                 text_y,
                 label,
                 ha="center",

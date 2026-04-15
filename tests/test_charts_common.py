@@ -3,6 +3,7 @@ import unittest
 import tempfile
 from pathlib import Path
 
+from matplotlib.colors import to_hex
 from matplotlib.patches import Wedge
 from openpyxl import Workbook
 
@@ -113,6 +114,247 @@ class TestChartsCommon(unittest.TestCase):
             try:
                 labels = [t.get_text() for t in ax.texts]
                 self.assertEqual(labels, ["8,8", "9,1"])
+            finally:
+                close_figure(fig)
+
+    def test_plot_bar_respects_explicit_delta_pair_order(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "S"
+
+        ws["A1"].value = 100
+        ws["B1"].value = 120
+        ws["C1"].value = 150
+        ws["A2"].value = "T1"
+        ws["B2"].value = "T2"
+        ws["C2"].value = "T3"
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            xlsx_path = td_path / "t.xlsx"
+            out_path = td_path / "out.png"
+            wb.save(xlsx_path)
+
+            fig, ax = plot_bar_from_excel(
+                ExcelBarChartSpec(
+                    file_path=xlsx_path,
+                    sheet_name="S",
+                    values_range="A1:C1",
+                    xlabels_range="A2:C2",
+                    output_path=out_path,
+                    show_delta_pct=True,
+                    show_delta_bracket=True,
+                    delta_pairs=((0, 2), (1, 2)),
+                )
+            )
+            try:
+                delta_labels = [text.get_text() for text in ax.texts if "%" in text.get_text()]
+                self.assertEqual(delta_labels, ["+50,0%", "+25,0%"])
+            finally:
+                close_figure(fig)
+
+    def test_plot_bar_can_shift_delta_label_left_with_explicit_fraction(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "S"
+
+        ws["A1"].value = 100
+        ws["B1"].value = 120
+        ws["C1"].value = 150
+        ws["A2"].value = "T1"
+        ws["B2"].value = "T2"
+        ws["C2"].value = "T3"
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            xlsx_path = td_path / "t.xlsx"
+            out_path = td_path / "out.png"
+            wb.save(xlsx_path)
+
+            fig, ax = plot_bar_from_excel(
+                ExcelBarChartSpec(
+                    file_path=xlsx_path,
+                    sheet_name="S",
+                    values_range="A1:C1",
+                    xlabels_range="A2:C2",
+                    output_path=out_path,
+                    show_delta_pct=True,
+                    show_delta_bracket=True,
+                    delta_pairs=((0, 2), (1, 2)),
+                    delta_label_x_fractions=(0.30, 0.50),
+                )
+            )
+            try:
+                delta_texts = [text for text in ax.texts if "%" in text.get_text()]
+                self.assertEqual([text.get_text() for text in delta_texts], ["+50,0%", "+25,0%"])
+
+                first_x = delta_texts[0].get_position()[0]
+                second_x = delta_texts[1].get_position()[0]
+
+                bar_centers = [
+                    patch.get_x() + patch.get_width() / 2.0
+                    for patch in ax.patches
+                ]
+                first_midpoint = (bar_centers[0] + bar_centers[2]) / 2.0
+                second_midpoint = (bar_centers[1] + bar_centers[2]) / 2.0
+
+                self.assertLess(first_x, first_midpoint)
+                self.assertAlmostEqual(second_x, second_midpoint, places=6)
+            finally:
+                close_figure(fig)
+
+    def test_plot_bar_gap_scale_reduces_only_the_space_between_bars(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "S"
+
+        ws["A1"].value = 100
+        ws["B1"].value = 120
+        ws["C1"].value = 150
+        ws["A2"].value = "T1"
+        ws["B2"].value = "T2"
+        ws["C2"].value = "T3"
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            xlsx_path = td_path / "t.xlsx"
+            out_default = td_path / "out-default.png"
+            out_tight = td_path / "out-tight.png"
+            wb.save(xlsx_path)
+
+            fig_default, ax_default = plot_bar_from_excel(
+                ExcelBarChartSpec(
+                    file_path=xlsx_path,
+                    sheet_name="S",
+                    values_range="A1:C1",
+                    xlabels_range="A2:C2",
+                    output_path=out_default,
+                    bar_width_scale=0.5,
+                )
+            )
+            fig_tight, ax_tight = plot_bar_from_excel(
+                ExcelBarChartSpec(
+                    file_path=xlsx_path,
+                    sheet_name="S",
+                    values_range="A1:C1",
+                    xlabels_range="A2:C2",
+                    output_path=out_tight,
+                    bar_width_scale=0.5,
+                    gap_scale=0.5,
+                )
+            )
+            try:
+                default_patches = ax_default.patches
+                tight_patches = ax_tight.patches
+
+                self.assertAlmostEqual(default_patches[0].get_width(), tight_patches[0].get_width(), places=6)
+
+                default_gap = default_patches[1].get_x() - (
+                    default_patches[0].get_x() + default_patches[0].get_width()
+                )
+                tight_gap = tight_patches[1].get_x() - (
+                    tight_patches[0].get_x() + tight_patches[0].get_width()
+                )
+
+                self.assertAlmostEqual(tight_gap, default_gap * 0.5, places=6)
+            finally:
+                close_figure(fig_default)
+                close_figure(fig_tight)
+
+    def test_plot_bar_delta_offset_scale_raises_delta_labels(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "S"
+
+        ws["A1"].value = 100
+        ws["B1"].value = 120
+        ws["C1"].value = 150
+        ws["A2"].value = "T1"
+        ws["B2"].value = "T2"
+        ws["C2"].value = "T3"
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            xlsx_path = td_path / "t.xlsx"
+            out_default = td_path / "out-default.png"
+            out_raised = td_path / "out-raised.png"
+            wb.save(xlsx_path)
+
+            fig_default, ax_default = plot_bar_from_excel(
+                ExcelBarChartSpec(
+                    file_path=xlsx_path,
+                    sheet_name="S",
+                    values_range="A1:C1",
+                    xlabels_range="A2:C2",
+                    output_path=out_default,
+                    show_delta_pct=True,
+                    show_delta_bracket=True,
+                    delta_pairs=((0, 2), (1, 2)),
+                )
+            )
+            fig_raised, ax_raised = plot_bar_from_excel(
+                ExcelBarChartSpec(
+                    file_path=xlsx_path,
+                    sheet_name="S",
+                    values_range="A1:C1",
+                    xlabels_range="A2:C2",
+                    output_path=out_raised,
+                    show_delta_pct=True,
+                    show_delta_bracket=True,
+                    delta_pairs=((0, 2), (1, 2)),
+                    delta_offset_scale=1.25,
+                )
+            )
+            try:
+                default_texts = [text for text in ax_default.texts if "%" in text.get_text()]
+                raised_texts = [text for text in ax_raised.texts if "%" in text.get_text()]
+
+                self.assertEqual([text.get_text() for text in default_texts], ["+50,0%", "+25,0%"])
+                self.assertEqual([text.get_text() for text in raised_texts], ["+50,0%", "+25,0%"])
+                self.assertGreater(raised_texts[0].get_position()[1], default_texts[0].get_position()[1])
+                self.assertGreater(raised_texts[1].get_position()[1], default_texts[1].get_position()[1])
+            finally:
+                close_figure(fig_default)
+                close_figure(fig_raised)
+
+    def test_plot_bar_can_customize_bracket_stroke_color_per_pair(self):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "S"
+
+        ws["A1"].value = 100
+        ws["B1"].value = 120
+        ws["C1"].value = 150
+        ws["A2"].value = "T1"
+        ws["B2"].value = "T2"
+        ws["C2"].value = "T3"
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            xlsx_path = td_path / "t.xlsx"
+            out_path = td_path / "out.png"
+            wb.save(xlsx_path)
+
+            fig, ax = plot_bar_from_excel(
+                ExcelBarChartSpec(
+                    file_path=xlsx_path,
+                    sheet_name="S",
+                    values_range="A1:C1",
+                    xlabels_range="A2:C2",
+                    output_path=out_path,
+                    show_delta_pct=True,
+                    show_delta_bracket=True,
+                    delta_pairs=((0, 2), (1, 2)),
+                    delta_bracket_colors=("#123a7a", "#2f2f2f"),
+                )
+            )
+            try:
+                self.assertGreaterEqual(len(ax.lines), 2)
+                self.assertEqual(to_hex(ax.lines[0].get_color()), "#123a7a")
+                self.assertEqual(to_hex(ax.lines[1].get_color()), "#2f2f2f")
+
+                delta_texts = [text for text in ax.texts if "%" in text.get_text()]
+                self.assertEqual([to_hex(text.get_color()) for text in delta_texts], ["#2f2f2f", "#2f2f2f"])
             finally:
                 close_figure(fig)
 

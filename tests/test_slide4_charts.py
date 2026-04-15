@@ -1,10 +1,20 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from openpyxl import Workbook
 
-from src.utils.slides.slide4_charts import _extract_slide4_donut_series, generate_slide4_charts
+from src.utils.slides.slide4_charts import (
+    SLIDE4_BAR_FONT_SCALE,
+    SLIDE4_BAR_GAP_SCALE,
+    SLIDE4_BAR_WIDTH_SCALE,
+    SLIDE4_9M_DELTA_OFFSET_SCALE,
+    SLIDE4_TRIMESTRES_DELTA_BRACKET_COLORS,
+    SLIDE4_TRIMESTRES_DELTA_OFFSET_SCALE,
+    _extract_slide4_donut_series,
+    generate_slide4_charts,
+)
 
 
 class TestSlide4Charts(unittest.TestCase):
@@ -173,6 +183,78 @@ class TestSlide4Charts(unittest.TestCase):
             for file_path in files:
                 self.assertTrue(file_path.exists())
                 self.assertGreater(file_path.stat().st_size, 0)
+
+    @patch("src.utils.slides.slide4_charts.close_figure")
+    @patch("src.utils.slides.slide4_charts.plot_bar_from_excel")
+    @patch("src.utils.slides.slide4_charts.plot_donut_chart")
+    def test_generate_slide4_charts_uses_updated_bar_specs(
+        self,
+        plot_donut_chart_mock,
+        plot_bar_from_excel_mock,
+        close_figure_mock,
+    ):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Carteira"
+        ws_pizza = wb.create_sheet("Pizza Teste")
+
+        for row, value in {
+            16: 46888,
+            17: 3258,
+            18: 4558,
+            19: 3731,
+            23: 5262,
+            24: 5230,
+            25: 39,
+            28: 6547,
+            29: 2507,
+            30: 1265,
+            35: 6120,
+            36: 11885,
+        }.items():
+            ws.cell(row=row, column=6).value = value
+
+        for col_offset, label in enumerate(["3T25", "4T25", "1T26"], start=8):
+            ws_pizza.cell(row=3, column=col_offset).value = label
+        for col_offset, value in enumerate([120, 135, 150], start=8):
+            ws_pizza.cell(row=4, column=col_offset).value = value
+
+        for col_offset, label in enumerate(["9M25", "9M26"], start=11):
+            ws_pizza.cell(row=3, column=col_offset).value = label
+        for col_offset, value in enumerate([390, 420], start=11):
+            ws_pizza.cell(row=4, column=col_offset).value = value
+
+        dummy_fig = object()
+        dummy_ax = object()
+        plot_donut_chart_mock.return_value = (dummy_fig, dummy_ax)
+        plot_bar_from_excel_mock.side_effect = [(dummy_fig, dummy_ax), (dummy_fig, dummy_ax)]
+
+        with tempfile.TemporaryDirectory() as td:
+            xlsx_path = Path(td) / "test.xlsx"
+            output_dir = Path(td) / "out"
+            wb.save(xlsx_path)
+
+            generate_slide4_charts(xlsx_path=xlsx_path, output_dir=output_dir)
+
+        self.assertEqual(plot_bar_from_excel_mock.call_count, 2)
+
+        trimestres_spec = plot_bar_from_excel_mock.call_args_list[0].args[0]
+        self.assertEqual(trimestres_spec.font_scale, SLIDE4_BAR_FONT_SCALE)
+        self.assertEqual(trimestres_spec.delta_pairs, ((0, 2), (1, 2)))
+        self.assertEqual(trimestres_spec.delta_bracket_colors, SLIDE4_TRIMESTRES_DELTA_BRACKET_COLORS)
+        self.assertEqual(trimestres_spec.delta_label_x_fractions, (0.30, 0.50))
+        self.assertEqual(trimestres_spec.bar_width_scale, SLIDE4_BAR_WIDTH_SCALE)
+        self.assertEqual(trimestres_spec.gap_scale, SLIDE4_BAR_GAP_SCALE)
+        self.assertEqual(trimestres_spec.delta_offset_scale, SLIDE4_TRIMESTRES_DELTA_OFFSET_SCALE)
+
+        nove_meses_spec = plot_bar_from_excel_mock.call_args_list[1].args[0]
+        self.assertEqual(nove_meses_spec.font_scale, SLIDE4_BAR_FONT_SCALE)
+        self.assertEqual(nove_meses_spec.delta_pairs, ((0, 1),))
+        self.assertEqual(nove_meses_spec.bar_width_scale, SLIDE4_BAR_WIDTH_SCALE)
+        self.assertEqual(nove_meses_spec.gap_scale, SLIDE4_BAR_GAP_SCALE)
+        self.assertEqual(nove_meses_spec.delta_offset_scale, SLIDE4_9M_DELTA_OFFSET_SCALE)
+
+        self.assertEqual(close_figure_mock.call_count, 3)
 
 if __name__ == "__main__":
     unittest.main()

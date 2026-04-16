@@ -515,6 +515,9 @@ def plot_line_from_excel(
     y_expand: float = 0.0,
     marker_color: str = "#123a7a",
     label_offset_pts: float = 10.0,
+    label_offsets_pts: Optional[Sequence[float]] = None,
+    label_x_offsets_pts: Optional[Sequence[float]] = None,
+    label_horizontal_alignments: Optional[Sequence[str]] = None,
     line_width: float = 2.2,
     label_fontsize: float = 9.0,
     marker_size: float = 26.0,
@@ -589,12 +592,33 @@ def plot_line_from_excel(
     last_idx = len(values) - 1
     for i, (xi, yi) in enumerate(zip(x, y)):
         label = f"{yi:.1f}%".replace(".", ",") if fmt_as_percent else str(yi).replace(".", ",")
+        point_label_x_offset = 0.0
+        point_label_offset = float(label_offset_pts)
+        point_label_ha = "center"
+        if label_x_offsets_pts is not None and i < len(label_x_offsets_pts):
+            try:
+                candidate_x_offset = float(label_x_offsets_pts[i])
+            except (TypeError, ValueError):
+                candidate_x_offset = point_label_x_offset
+            if np.isfinite(candidate_x_offset):
+                point_label_x_offset = candidate_x_offset
+        if label_horizontal_alignments is not None and i < len(label_horizontal_alignments):
+            candidate_ha = str(label_horizontal_alignments[i]).strip().lower()
+            if candidate_ha in {"left", "center", "right"}:
+                point_label_ha = candidate_ha
+        if label_offsets_pts is not None and i < len(label_offsets_pts):
+            try:
+                candidate_offset = float(label_offsets_pts[i])
+            except (TypeError, ValueError):
+                candidate_offset = point_label_offset
+            if np.isfinite(candidate_offset):
+                point_label_offset = candidate_offset
         ax.annotate(
             label,
             (xi, yi),
             textcoords="offset points",
-            xytext=(0, label_offset_pts),
-            ha="center",
+            xytext=(point_label_x_offset, point_label_offset),
+            ha=point_label_ha,
             va="bottom",
             fontsize=float(label_fontsize),
             color="#2f2f2f",

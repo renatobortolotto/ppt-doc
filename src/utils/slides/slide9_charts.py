@@ -8,6 +8,23 @@ from openpyxl.utils.cell import range_boundaries
 
 from src.utils.charts_common import close_figure, plot_line_from_excel, to_float_list
 
+SLIDE9_STACKED_FONT_SCALE = 2.0
+SLIDE9_COVERAGE_FONT_SCALE = 2.0
+SLIDE9_STACKED_LEGEND_X_OFFSET = 1.32
+SLIDE9_STACKED_XTICK_PAD = 4.0
+SLIDE9_COVERAGE_XTICK_PAD = 4.0
+SLIDE9_LINE_LABEL_FONT_SCALE = 2.0
+SLIDE9_LINE_TRI_LABEL_FONTSIZE = 56.0
+SLIDE9_LINE_9M_LABEL_FONTSIZE = 64.0
+SLIDE9_LINE_LABEL_OFFSET_PTS = 10.0
+SLIDE9_LINE_9M_LABEL_OFFSETS_PTS = (10.0, 28.0)
+SLIDE9_LINE_9M_LABEL_X_OFFSETS_PTS = (0.0, 18.0)
+SLIDE9_LINE_9M_LABEL_HORIZONTAL_ALIGNMENTS = ("center", "left")
+SLIDE9_9M_DELTA_PAIRS = ((0, 2), (1, 2))
+SLIDE9_9M_DELTA_BRACKET_COLORS = ("#123a7a", "#2f2f2f")
+SLIDE9_9M_DELTA_LABEL_X_FRACTIONS = (0.30, 0.50)
+SLIDE9_LEGEND_MAX_LINE_LEN = 15
+
 
 def _read_range_row(ws, cell_range: str) -> list[object]:
     min_col, min_row, max_col, max_row = range_boundaries(cell_range)
@@ -69,6 +86,12 @@ def _plot_stacked_bars_with_total(
     values: np.ndarray,  # shape: [n_bars, n_series]
     output_path: Path,
     colors: list[str],
+    font_scale: float = 1.0,
+    legend_x_offset: float = 1.28,
+    x_tick_pad: float = 8.0,
+    delta_pairs: tuple[tuple[int, int], ...] = (),
+    delta_bracket_colors: tuple[str, ...] = (),
+    delta_label_x_fractions: tuple[float, ...] = (),
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import to_rgba
@@ -137,7 +160,7 @@ def _plot_stacked_bars_with_total(
                 _fmt_int(v),
                 ha="center",
                 va="center",
-                fontsize=9.0,
+                fontsize=9.0 * float(font_scale),
                 color=txt_color,
                 zorder=4,
             )
@@ -164,7 +187,7 @@ def _plot_stacked_bars_with_total(
             _fmt_int(total),
             ha="center",
             va="bottom",
-            fontsize=10.0,
+            fontsize=10.0 * float(font_scale),
             fontweight="bold" if i == n - 1 else "normal",
             color="#2f2f2f",
             zorder=5,
@@ -183,35 +206,66 @@ def _plot_stacked_bars_with_total(
         top_labels_max = max(total_label_tops) if total_label_tops else float(np.nanmax(visual_tops))
         top_base = float(top_labels_max) + headroom
 
-        for i in range(1, n):
-            prev = float(totals[i - 1])
-            curr = float(totals[i])
+        pairs = list(delta_pairs) if delta_pairs else [(i - 1, i) for i in range(1, n)]
+
+        def _norm_index(idx: int) -> int:
+            return idx + n if idx < 0 else idx
+
+        norm_pairs: list[tuple[int, int]] = []
+        for prev_i, curr_i in pairs:
+            pi = _norm_index(int(prev_i))
+            ci = _norm_index(int(curr_i))
+            if pi < 0 or pi >= n or ci < 0 or ci >= n or pi == ci:
+                continue
+            norm_pairs.append((pi, ci))
+
+        if delta_pairs:
+            norm_pairs_sorted = norm_pairs
+        else:
+            norm_pairs_sorted = sorted(norm_pairs, key=lambda p: (abs(p[1] - p[0]), p[0], p[1]))
+
+        for level, (pi, ci) in enumerate(norm_pairs_sorted):
+            prev = float(totals[pi])
+            curr = float(totals[ci])
             if not np.isfinite(prev) or not np.isfinite(curr) or prev == 0:
                 continue
 
             pct = (curr / prev - 1.0) * 100.0
             label = f"{pct:+.1f}%".replace(".", ",")
 
-            x1 = float(x[i - 1])
-            x2 = float(x[i])
+            x1 = float(x[pi])
+            x2 = float(x[ci])
             y_anchor = top_base
+            bracket_color = "#2f2f2f"
+            if level < len(delta_bracket_colors):
+                candidate_color = str(delta_bracket_colors[level]).strip()
+                if candidate_color:
+                    bracket_color = candidate_color
 
             ax.plot(
                 [x1, x1, x2, x2],
                 [y_anchor, y_anchor + bracket_h, y_anchor + bracket_h, y_anchor],
-                color="#2f2f2f",
+                color=bracket_color,
                 linewidth=1.2,
                 solid_capstyle="round",
                 zorder=4,
             )
             text_y = y_anchor + bracket_h + offset_y * 0.25
+            label_fraction = 0.50
+            if level < len(delta_label_x_fractions):
+                try:
+                    candidate_fraction = float(delta_label_x_fractions[level])
+                except (TypeError, ValueError):
+                    candidate_fraction = label_fraction
+                if np.isfinite(candidate_fraction):
+                    label_fraction = min(max(candidate_fraction, 0.0), 1.0)
             ax.text(
-                (x1 + x2) / 2.0,
+                x1 + (x2 - x1) * label_fraction,
                 text_y,
                 label,
                 ha="center",
                 va="bottom",
-                fontsize=9.0,
+                fontsize=9.0 * float(font_scale),
                 color="#2f2f2f",
                 zorder=5,
             )
@@ -224,10 +278,10 @@ def _plot_stacked_bars_with_total(
     # Linha de base explícita para deixar os negativos visualmente abaixo de Y=0.
     ax.axhline(0.0, color="#2f2f2f", linewidth=1.2, zorder=1)
 
-    # Legenda inline: marcador de cor + texto ao lado da cor correspondente.
-    x_leg = float(x.min()) - 1.28
+    # Legenda inline no padrão do slide 14: apenas texto alinhado à direita, próximo ao gráfico.
+    x_text = float(x[0]) - width / 2.0 - 0.08
     for j, name in enumerate(series_names):
-        y_ref = segment_centers[j][-1] if segment_centers[j] else float("nan")
+        y_ref = segment_centers[j][0] if segment_centers[j] else float("nan")
         if not np.isfinite(y_ref):
             for yc in segment_centers[j]:
                 if np.isfinite(yc):
@@ -235,23 +289,22 @@ def _plot_stacked_bars_with_total(
                     break
         if not np.isfinite(y_ref):
             continue
-        ax.scatter([x_leg], [float(y_ref)], s=90.0, marker="s", color=colors[j % len(colors)], edgecolors="none", zorder=6)
         ax.text(
-            x_leg + 0.16,
+            x_text,
             float(y_ref),
-            _wrap_words(str(name), max_line_len=15),
-            ha="left",
+            _wrap_words(str(name), max_line_len=SLIDE9_LEGEND_MAX_LINE_LEN),
+            ha="right",
             va="center",
-            fontsize=9.0,
+            fontsize=9.0 * float(font_scale),
             color="#2f2f2f",
-            zorder=6,
+            zorder=7,
             clip_on=False,
         )
 
-    ax.set_xlim(float(x.min()) - 1.75, float(x.max()) + 0.65)
+    ax.set_xlim(float(x.min()) - float(legend_x_offset), float(x.max()) + 0.65)
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0)
-    ax.tick_params(axis="x", bottom=False, pad=8)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * float(font_scale))
+    ax.tick_params(axis="x", bottom=False, pad=float(x_tick_pad))
     ax.set_yticks([])
     for s in ("left", "right", "top", "bottom"):
         ax.spines[s].set_visible(False)
@@ -271,6 +324,8 @@ def _plot_indice_cobertura_percent(
     values: list[float],
     output_path: Path,
     highlight_last_count: int = 3,
+    font_scale: float = 1.0,
+    x_tick_pad: float = 8.0,
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.patches import FancyBboxPatch
@@ -299,11 +354,12 @@ def _plot_indice_cobertura_percent(
         x_right = float(x[i1] + 0.62 / 2.0 + 0.18)
         y_top = float(np.nanmax(vals_pct[i0:i1 + 1]))
         y_bottom = 0.0
-        pad_y = max(y_top * 0.10, 8.0)
+        pad_bottom = max(y_top * 0.05, 6.0)
+        pad_top = max(y_top * 0.18, 18.0)
         box = FancyBboxPatch(
-            (x_left, y_bottom - pad_y * 0.22),
+            (x_left, y_bottom - pad_bottom),
             x_right - x_left,
-            (y_top - y_bottom) + pad_y,
+            (y_top - y_bottom) + pad_bottom + pad_top,
             boxstyle="round,pad=0.02,rounding_size=0.14",
             linewidth=2.0,
             edgecolor="#123a7a",
@@ -320,7 +376,7 @@ def _plot_indice_cobertura_percent(
             label,
             ha="center",
             va="bottom",
-            fontsize=10.0,
+            fontsize=10.0 * float(font_scale),
             fontweight="bold" if i == len(vals_pct) - 1 else "normal",
             color="#2f2f2f",
             zorder=4,
@@ -328,8 +384,8 @@ def _plot_indice_cobertura_percent(
         )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0)
-    ax.tick_params(axis="x", bottom=False, pad=8)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * float(font_scale))
+    ax.tick_params(axis="x", bottom=False, pad=float(x_tick_pad))
     ax.set_yticks([])
     for s in ("left", "right", "top", "bottom"):
         ax.spines[s].set_visible(False)
@@ -374,6 +430,9 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         values=tri_values,
         output_path=out19,
         colors=palette,
+        font_scale=SLIDE9_STACKED_FONT_SCALE,
+        legend_x_offset=SLIDE9_STACKED_LEGEND_X_OFFSET,
+        x_tick_pad=SLIDE9_STACKED_XTICK_PAD,
     )
     generated.append(out19)
 
@@ -389,6 +448,12 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         values=ytd_values,
         output_path=out20,
         colors=palette,
+        font_scale=SLIDE9_STACKED_FONT_SCALE,
+        legend_x_offset=SLIDE9_STACKED_LEGEND_X_OFFSET,
+        x_tick_pad=SLIDE9_STACKED_XTICK_PAD,
+        delta_pairs=SLIDE9_9M_DELTA_PAIRS,
+        delta_bracket_colors=SLIDE9_9M_DELTA_BRACKET_COLORS,
+        delta_label_x_fractions=SLIDE9_9M_DELTA_LABEL_X_FRACTIONS,
     )
     generated.append(out20)
 
@@ -400,6 +465,8 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         values=cov_values,
         output_path=output_dir / "09_indice_cobertura.png",
         highlight_last_count=2,
+        font_scale=SLIDE9_COVERAGE_FONT_SCALE,
+        x_tick_pad=SLIDE9_COVERAGE_XTICK_PAD,
     )
     generated.append(output_dir / "09_indice_cobertura.png")
 
@@ -415,9 +482,9 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         y_expand=0.10,
         smooth=True,
         line_width=6.0,
-        label_fontsize=28.0,
+        label_fontsize=SLIDE9_LINE_TRI_LABEL_FONTSIZE,
         marker_size=160.0,
-        label_offset_pts=20.0,
+        label_offset_pts=SLIDE9_LINE_LABEL_OFFSET_PTS,
     )
     close_figure(fig)
     generated.append(output_dir / "09_custo_variacao_custo_credito.png")
@@ -432,9 +499,12 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         fmt_as_percent=True,
         smooth=True,
         line_width=6.0,
-        label_fontsize=32.0,
+        label_fontsize=SLIDE9_LINE_9M_LABEL_FONTSIZE,
         marker_size=220.0,
-        label_offset_pts=20.0,
+        label_offset_pts=SLIDE9_LINE_LABEL_OFFSET_PTS,
+        label_offsets_pts=SLIDE9_LINE_9M_LABEL_OFFSETS_PTS,
+        label_x_offsets_pts=SLIDE9_LINE_9M_LABEL_X_OFFSETS_PTS,
+        label_horizontal_alignments=SLIDE9_LINE_9M_LABEL_HORIZONTAL_ALIGNMENTS,
         x_margin=0.55,
     )
     close_figure(fig)

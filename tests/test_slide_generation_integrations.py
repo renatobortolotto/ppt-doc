@@ -74,7 +74,6 @@ class TestSlideGenerationIntegrations(unittest.TestCase):
         wb = Workbook()
         ws_expenses = wb.active
         ws_expenses.title = "Tabelas"
-        ws_index = wb.create_sheet("slide_11")
 
         for col_offset, label in enumerate(["1T25", "2T25", "3T25"], start=4):
             ws_expenses.cell(row=33, column=col_offset).value = label
@@ -94,11 +93,6 @@ class TestSlideGenerationIntegrations(unittest.TestCase):
         for col_offset, value in enumerate([31, 33], start=7):
             ws_expenses.cell(row=45, column=col_offset).value = value
 
-        for col_offset, label in enumerate(["1T25", "2T25", "3T25", "9M24", "9M25"], start=11):
-            ws_index.cell(row=3, column=col_offset).value = label
-        for col_offset, value in enumerate([0.37, 0.38, 0.39, 0.40, 0.41], start=11):
-            ws_index.cell(row=4, column=col_offset).value = value
-
         with tempfile.TemporaryDirectory() as td:
             xlsx_path = Path(td) / "slide11.xlsx"
             output_dir = Path(td) / "out"
@@ -109,7 +103,6 @@ class TestSlideGenerationIntegrations(unittest.TestCase):
                 [
                     "11_despesas_pessoal_adm_trimestres.png",
                     "11_despesas_pessoal_adm_9m.png",
-                    "11_indice_eficiencia.png",
                 ],
             )
 

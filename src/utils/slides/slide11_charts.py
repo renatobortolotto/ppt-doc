@@ -8,6 +8,11 @@ from openpyxl.utils.cell import range_boundaries
 
 from src.utils.charts_common import close_figure, to_float_list
 
+SLIDE11_FONT_SCALE = 1.5
+SLIDE11_TRI_DELTA_PAIRS = ((0, 2), (1, 2))
+SLIDE11_TRI_DELTA_BRACKET_COLORS = ("#123a7a", "#2f2f2f")
+SLIDE11_TRI_DELTA_LABEL_X_FRACTIONS = (0.30, 0.50)
+
 
 def _read_range_row(ws, cell_range: str) -> list[object]:
     min_col, min_row, max_col, max_row = range_boundaries(cell_range)
@@ -105,6 +110,10 @@ def _plot_stacked_expenses(
     series_names: list[str],
     values: np.ndarray,  # [n_bars, n_series]
     output_path: Path,
+    font_scale: float = 1.0,
+    delta_pairs: tuple[tuple[int, int], ...] = (),
+    delta_bracket_colors: tuple[str, ...] = (),
+    delta_label_x_fractions: tuple[float, ...] = (),
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import to_rgba
@@ -150,7 +159,7 @@ def _plot_stacked_expenses(
                 _fmt_int(v),
                 ha="center",
                 va="center",
-                fontsize=9.0,
+                fontsize=9.0 * float(font_scale),
                 color=txt_color,
                 zorder=4,
             )
@@ -170,7 +179,7 @@ def _plot_stacked_expenses(
             _fmt_int(total),
             ha="center",
             va="bottom",
-            fontsize=10.0,
+            fontsize=10.0 * float(font_scale),
             fontweight="bold" if i == n - 1 else "normal",
             color="#2f2f2f",
             zorder=5,
@@ -194,33 +203,59 @@ def _plot_stacked_expenses(
             top_base = ax.transData.inverted().transform((0.0, highest_label_display_y + 28.0))[1]
         max_text_y: float | None = None
 
-        for i in range(1, n):
-            prev = float(totals[i - 1])
-            curr = float(totals[i])
+        pairs = list(delta_pairs) if delta_pairs else [(i - 1, i) for i in range(1, n)]
+
+        def _norm_index(idx: int) -> int:
+            return idx + n if idx < 0 else idx
+
+        norm_pairs: list[tuple[int, int]] = []
+        for prev_i, curr_i in pairs:
+            pi = _norm_index(int(prev_i))
+            ci = _norm_index(int(curr_i))
+            if pi < 0 or pi >= n or ci < 0 or ci >= n or pi == ci:
+                continue
+            norm_pairs.append((pi, ci))
+
+        for level, (pi, ci) in enumerate(norm_pairs):
+            prev = float(totals[pi])
+            curr = float(totals[ci])
             if not np.isfinite(prev) or not np.isfinite(curr) or prev == 0:
                 continue
             pct = (curr / prev - 1.0) * 100.0
             label = f"{pct:+.1f}%".replace(".", ",")
 
-            x1 = float(x[i - 1])
-            x2 = float(x[i])
+            x1 = float(x[pi])
+            x2 = float(x[ci])
             y_anchor = top_base
+            bracket_color = "#2f2f2f"
+            if level < len(delta_bracket_colors):
+                candidate_color = str(delta_bracket_colors[level]).strip()
+                if candidate_color:
+                    bracket_color = candidate_color
             ax.plot(
                 [x1, x1, x2, x2],
                 [y_anchor, y_anchor + bracket_h, y_anchor + bracket_h, y_anchor],
-                color="#2f2f2f",
+                color=bracket_color,
                 linewidth=1.2,
                 solid_capstyle="round",
                 zorder=4,
             )
             text_y = y_anchor + bracket_h + offset_y * 0.25
+            label_fraction = 0.50
+            if level < len(delta_label_x_fractions):
+                try:
+                    candidate_fraction = float(delta_label_x_fractions[level])
+                except (TypeError, ValueError):
+                    candidate_fraction = label_fraction
+                if np.isfinite(candidate_fraction):
+                    label_fraction = min(max(candidate_fraction, 0.0), 1.0)
             ax.text(
-                (x1 + x2) / 2.0,
+                x1 + (x2 - x1) * label_fraction,
                 text_y,
                 label,
                 ha="center",
                 va="bottom",
-                fontsize=9.0,
+                fontsize=9.0 * float(font_scale),
                 color="#2f2f2f",
                 zorder=5,
             )
@@ -247,7 +282,7 @@ def _plot_stacked_expenses(
             _wrap_words(str(name), max_line_len=16),
             ha="right",
             va="center",
-            fontsize=9.0,
+            fontsize=9.0 * float(font_scale),
             color="#2f2f2f",
             zorder=6,
             clip_on=False,
@@ -258,7 +293,7 @@ def _plot_stacked_expenses(
         float(x.max()) + (0.38 if n <= 2 else 0.30),
     )
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * float(font_scale))
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for s in ("left", "right", "top", "bottom"):
@@ -278,6 +313,7 @@ def _plot_efficiency_index(
     xlabels: list[str],
     values: list[float],  # fraction values, e.g. 0.377
     output_path: Path,
+    font_scale: float = 1.0,
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -298,7 +334,7 @@ def _plot_efficiency_index(
             f"{v:.1f}%".replace(".", ","),
             ha="center",
             va="bottom",
-            fontsize=10.0,
+            fontsize=10.0 * float(font_scale),
             fontweight="bold" if i == len(vals_pct) - 1 else "normal",
             color="#2f2f2f",
             zorder=4,
@@ -333,7 +369,7 @@ def _plot_efficiency_index(
             label,
             ha="center",
             va="bottom",
-            fontsize=9.0,
+            fontsize=9.0 * float(font_scale),
             color="#2f2f2f",
             zorder=5,
         )
@@ -341,7 +377,7 @@ def _plot_efficiency_index(
         ax.set_ylim(ymin, max(ymax, text_y + offset_y * 1.2))
 
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * float(font_scale))
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for s in ("left", "right", "top", "bottom"):
@@ -356,19 +392,15 @@ def _plot_efficiency_index(
 
 
 def generate_slide11_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
-    """Slide 11: despesas (tri + 9M) e índice de eficiência."""
+    """Slide 11: despesas (tri + 9M) a partir da aba Tabelas."""
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
     wb = load_workbook(filename=xlsx_path, data_only=True)
     expenses_sheet_name = "Tabelas"
-    index_sheet_name = "slide_11"
     if expenses_sheet_name not in wb.sheetnames:
         raise ValueError(f"Aba não encontrada: {expenses_sheet_name!r}. Disponíveis: {wb.sheetnames}")
-    if index_sheet_name not in wb.sheetnames:
-        raise ValueError(f"Aba não encontrada: {index_sheet_name!r}. Disponíveis: {wb.sheetnames}")
     ws_expenses = wb[expenses_sheet_name]
-    ws_index = wb[index_sheet_name]
 
     tri_labels, series, tri_values = _read_named_series_rows(
         ws_expenses,
@@ -400,6 +432,10 @@ def generate_slide11_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         series_names=series,
         values=tri_values,
         output_path=out22,
+        font_scale=SLIDE11_FONT_SCALE,
+        delta_pairs=SLIDE11_TRI_DELTA_PAIRS,
+        delta_bracket_colors=SLIDE11_TRI_DELTA_BRACKET_COLORS,
+        delta_label_x_fractions=SLIDE11_TRI_DELTA_LABEL_X_FRACTIONS,
     )
     generated.append(out22)
 
@@ -409,18 +445,9 @@ def generate_slide11_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         series_names=series,
         values=nm_values,
         output_path=out23,
+        font_scale=SLIDE11_FONT_SCALE,
     )
     generated.append(out23)
-
-    idx_labels = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_index, "K3:O3")]
-    idx_values = to_float_list(_read_range_row(ws_index, "K4:O4"))
-    out24 = output_dir / "11_indice_eficiencia.png"
-    _plot_efficiency_index(
-        xlabels=idx_labels,
-        values=idx_values,
-        output_path=out24,
-    )
-    generated.append(out24)
 
     return generated
 

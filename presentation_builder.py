@@ -226,7 +226,6 @@ def _chart_generators() -> Sequence[ChartGeneratorSpec]:
             output_files=(
                 "11_despesas_pessoal_adm_trimestres.png",
                 "11_despesas_pessoal_adm_9m.png",
-                "11_indice_eficiencia.png",
             ),
         ),
         ChartGeneratorSpec(

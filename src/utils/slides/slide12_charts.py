@@ -8,6 +8,11 @@ from openpyxl.utils.cell import range_boundaries
 
 from src.utils.charts_common import close_figure, to_float_list
 
+SLIDE12_FONT_SCALE = 1.4
+SLIDE12_DELTA_PAIRS = ((0, 2), (1, 2))
+SLIDE12_DELTA_BRACKET_COLORS = ("#123a7a", "#2f2f2f")
+SLIDE12_DELTA_LABEL_X_FRACTIONS = (0.30, 0.50)
+
 
 def _read_range_row(ws, cell_range: str) -> list[object]:
     min_col, min_row, max_col, max_row = range_boundaries(cell_range)
@@ -47,8 +52,12 @@ def _plot_slide12_stacked(
     series_names: list[str],
     values: np.ndarray,  # [n_bars, n_series]
     output_path: Path,
+    font_scale: float = 1.0,
     bracket_top_gap_scale: float = 0.20,
     bracket_top_gap_min: float = 1.4,
+    delta_pairs: tuple[tuple[int, int], ...] = (),
+    delta_bracket_colors: tuple[str, ...] = (),
+    delta_label_x_fractions: tuple[float, ...] = (),
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import to_rgba
@@ -117,7 +126,7 @@ def _plot_slide12_stacked(
             _fmt_num(total, decimals=1),
             ha="center",
             va="bottom",
-            fontsize=10.0,
+            fontsize=10.0 * float(font_scale),
             fontweight="bold" if i == n - 1 else "normal",
             color="#2f2f2f",
             zorder=5,
@@ -140,7 +149,7 @@ def _plot_slide12_stacked(
             rgba = to_rgba(colors[j % len(colors)])
             txt_color = _text_color_for_bg_rgba(rgba)
             label = f"{_fmt_num(v, decimals=1)} ({_fmt_share(share, decimals=0)})"
-            fontsize = 8.6 if share >= 20.0 else 7.8
+            fontsize = (8.6 if share >= 20.0 else 7.8) * float(font_scale)
             fw = "bold" if share >= 20.0 else "normal"
             y_adj = 0.0
             ax.text(
@@ -155,7 +164,7 @@ def _plot_slide12_stacked(
                 zorder=6,
             )
 
-    # Brackets/deltas no topo (pares consecutivos), alinhados.
+    # Brackets/deltas no topo.
     abs_max = float(np.nanmax(np.abs(totals))) if np.isfinite(np.nanmax(np.abs(totals))) else 0.0
     offset_y = max(abs_max * 0.10, 0.8)
     bracket_h = max(abs_max * 0.03, 0.6)
@@ -166,33 +175,59 @@ def _plot_slide12_stacked(
     )
     max_text_y: float | None = None
 
-    for i in range(1, n):
-        prev = float(totals[i - 1])
-        curr = float(totals[i])
+    pairs = list(delta_pairs) if delta_pairs else [(i - 1, i) for i in range(1, n)]
+
+    def _norm_index(idx: int) -> int:
+        return idx + n if idx < 0 else idx
+
+    norm_pairs: list[tuple[int, int]] = []
+    for prev_i, curr_i in pairs:
+        pi = _norm_index(int(prev_i))
+        ci = _norm_index(int(curr_i))
+        if pi < 0 or pi >= n or ci < 0 or ci >= n or pi == ci:
+            continue
+        norm_pairs.append((pi, ci))
+
+    for level, (pi, ci) in enumerate(norm_pairs):
+        prev = float(totals[pi])
+        curr = float(totals[ci])
         if not np.isfinite(prev) or not np.isfinite(curr) or prev == 0:
             continue
         pct = (curr / prev - 1.0) * 100.0
         label = f"{pct:+.1f}%".replace(".", ",")
 
-        x1 = float(x[i - 1])
-        x2 = float(x[i])
+        x1 = float(x[pi])
+        x2 = float(x[ci])
         y_anchor = top_base
+        bracket_color = "#2f2f2f"
+        if level < len(delta_bracket_colors):
+            candidate_color = str(delta_bracket_colors[level]).strip()
+            if candidate_color:
+                bracket_color = candidate_color
         ax.plot(
             [x1, x1, x2, x2],
             [y_anchor, y_anchor + bracket_h, y_anchor + bracket_h, y_anchor],
-            color="#2f2f2f",
+            color=bracket_color,
             linewidth=1.2,
             solid_capstyle="round",
             zorder=4,
         )
         text_y = y_anchor + bracket_h + offset_y * 0.25
+        label_fraction = 0.50
+        if level < len(delta_label_x_fractions):
+            try:
+                candidate_fraction = float(delta_label_x_fractions[level])
+            except (TypeError, ValueError):
+                candidate_fraction = label_fraction
+            if np.isfinite(candidate_fraction):
+                label_fraction = min(max(candidate_fraction, 0.0), 1.0)
         ax.text(
-            (x1 + x2) / 2.0,
+            x1 + (x2 - x1) * label_fraction,
             text_y,
             label,
             ha="center",
             va="bottom",
-            fontsize=9.0,
+            fontsize=9.0 * float(font_scale),
             color="#2f2f2f",
             zorder=5,
         )
@@ -217,7 +252,7 @@ def _plot_slide12_stacked(
             str(series_names[j]),
             ha="right",
             va="center",
-            fontsize=8.1,
+            fontsize=8.1 * float(font_scale),
             color="#2f2f2f",
             zorder=7,
             clip_on=False,
@@ -225,7 +260,7 @@ def _plot_slide12_stacked(
 
     ax.set_xlim(float(x.min()) - 1.20, float(x.max()) + 0.65)
     ax.set_xticks(x)
-    ax.set_xticklabels(xlabels, fontsize=10.0)
+    ax.set_xticklabels(xlabels, fontsize=10.0 * float(font_scale))
     ax.tick_params(axis="x", bottom=False, pad=8)
     ax.set_yticks([])
     for s in ("left", "right", "top", "bottom"):
@@ -268,8 +303,12 @@ def generate_slide12_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         series_names=series_names,
         values=values,
         output_path=out25,
+        font_scale=SLIDE12_FONT_SCALE,
         bracket_top_gap_scale=0.12,
         bracket_top_gap_min=0.9,
+        delta_pairs=SLIDE12_DELTA_PAIRS,
+        delta_bracket_colors=SLIDE12_DELTA_BRACKET_COLORS,
+        delta_label_x_fractions=SLIDE12_DELTA_LABEL_X_FRACTIONS,
     )
     return [out25]
 

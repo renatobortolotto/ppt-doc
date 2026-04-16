@@ -24,6 +24,9 @@ SLIDE13_ATACADO_PALETTE = (
     "#9AA0A6",
     "#F8BBD0",
 )
+SLIDE13_DELTA_PAIRS = ((0, 2), (1, 2))
+SLIDE13_DELTA_BRACKET_COLORS = ("#123a7a", "#2f2f2f")
+SLIDE13_DELTA_LABEL_X_FRACTIONS = (0.30, 0.50)
 
 
 @dataclass(frozen=True)
@@ -172,6 +175,9 @@ def _plot_slide13_breakdown(
     figure_size: tuple[float, float] = (7.4, 6.0),
     bar_slot: float = 0.24,
     bar_width: float = 0.20,
+    delta_pairs: tuple[tuple[int, int], ...] = (),
+    delta_bracket_colors: tuple[str, ...] = (),
+    delta_label_x_fractions: tuple[float, ...] = (),
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import to_rgba
@@ -283,28 +289,54 @@ def _plot_slide13_breakdown(
         top_base = float(top_labels_max) + max(abs_max * 0.08, 0.32)
         max_text_y: float | None = None
 
-        for i in range(1, n):
-            prev = float(totals[i - 1])
-            curr = float(totals[i])
+        pairs = list(delta_pairs) if delta_pairs else [(i - 1, i) for i in range(1, n)]
+
+        def _norm_index(idx: int) -> int:
+            return idx + n if idx < 0 else idx
+
+        norm_pairs: list[tuple[int, int]] = []
+        for prev_i, curr_i in pairs:
+            pi = _norm_index(int(prev_i))
+            ci = _norm_index(int(curr_i))
+            if pi < 0 or pi >= n or ci < 0 or ci >= n or pi == ci:
+                continue
+            norm_pairs.append((pi, ci))
+
+        for level, (pi, ci) in enumerate(norm_pairs):
+            prev = float(totals[pi])
+            curr = float(totals[ci])
             if not np.isfinite(prev) or not np.isfinite(curr) or prev == 0:
                 continue
             pct = (curr / prev - 1.0) * 100.0
             label = f"{pct:+.1f}%".replace(".", ",")
 
-            x1 = float(x[i - 1])
-            x2 = float(x[i])
+            x1 = float(x[pi])
+            x2 = float(x[ci])
             y_anchor = top_base
+            bracket_color = "#2f2f2f"
+            if level < len(delta_bracket_colors):
+                candidate_color = str(delta_bracket_colors[level]).strip()
+                if candidate_color:
+                    bracket_color = candidate_color
             ax.plot(
                 [x1, x1, x2, x2],
                 [y_anchor, y_anchor + bracket_h, y_anchor + bracket_h, y_anchor],
-                color="#2f2f2f",
+                color=bracket_color,
                 linewidth=1.2,
                 solid_capstyle="round",
                 zorder=4,
             )
             text_y = y_anchor + bracket_h + offset_y * 0.25
+            label_fraction = 0.50
+            if level < len(delta_label_x_fractions):
+                try:
+                    candidate_fraction = float(delta_label_x_fractions[level])
+                except (TypeError, ValueError):
+                    candidate_fraction = label_fraction
+                if np.isfinite(candidate_fraction):
+                    label_fraction = min(max(candidate_fraction, 0.0), 1.0)
             ax.text(
-                (x1 + x2) / 2.0,
+                x1 + (x2 - x1) * label_fraction,
                 text_y,
                 label,
                 ha="center",
@@ -386,6 +418,9 @@ def generate_slide13_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
             values=values,
             output_path=output_path,
             palette=chart_spec.palette or SLIDE13_PALETTE,
+            delta_pairs=SLIDE13_DELTA_PAIRS,
+            delta_bracket_colors=SLIDE13_DELTA_BRACKET_COLORS,
+            delta_label_x_fractions=SLIDE13_DELTA_LABEL_X_FRACTIONS,
         )
         generated.append(output_path)
 

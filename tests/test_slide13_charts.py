@@ -3,15 +3,20 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import matplotlib.pyplot as plt
 import numpy as np
 from openpyxl import Workbook
 
 from src.utils.slides.slide13_charts import (
     _fmt_num,
+    _plot_slide13_breakdown,
     _share_label_indices,
     _stack_order_for_bar,
     _top_badge_label_indices,
     SLIDE13_ATACADO_PALETTE,
+    SLIDE13_DELTA_BRACKET_COLORS,
+    SLIDE13_DELTA_LABEL_X_FRACTIONS,
+    SLIDE13_DELTA_PAIRS,
     SLIDE13_PALETTE,
     generate_slide13_charts,
 )
@@ -77,6 +82,9 @@ class TestSlide13Charts(unittest.TestCase):
             figure_size=(7.4, 6.0),
             bar_slot=0.24,
             bar_width=0.20,
+            delta_pairs=(),
+            delta_bracket_colors=(),
+            delta_label_x_fractions=(),
         ):
             captured[Path(output_path).name] = {
                 "xlabels": list(xlabels),
@@ -86,6 +94,9 @@ class TestSlide13Charts(unittest.TestCase):
                 "figure_size": tuple(figure_size),
                 "bar_slot": bar_slot,
                 "bar_width": bar_width,
+                "delta_pairs": delta_pairs,
+                "delta_bracket_colors": delta_bracket_colors,
+                "delta_label_x_fractions": delta_label_x_fractions,
             }
 
         with tempfile.TemporaryDirectory() as td:
@@ -116,6 +127,15 @@ class TestSlide13Charts(unittest.TestCase):
         self.assertEqual(captured["13_varejo_produtos_entrada.png"]["figure_size"], (7.4, 6.0))
         self.assertEqual(captured["13_varejo_produtos_entrada.png"]["bar_slot"], 0.24)
         self.assertEqual(captured["13_varejo_produtos_entrada.png"]["bar_width"], 0.20)
+        self.assertEqual(captured["13_varejo_produtos_entrada.png"]["delta_pairs"], SLIDE13_DELTA_PAIRS)
+        self.assertEqual(
+            captured["13_varejo_produtos_entrada.png"]["delta_bracket_colors"],
+            SLIDE13_DELTA_BRACKET_COLORS,
+        )
+        self.assertEqual(
+            captured["13_varejo_produtos_entrada.png"]["delta_label_x_fractions"],
+            SLIDE13_DELTA_LABEL_X_FRACTIONS,
+        )
         self.assertEqual(
             captured["13_varejo_produtos_entrada.png"]["values"],
             [
@@ -153,6 +173,46 @@ class TestSlide13Charts(unittest.TestCase):
                 [2.2, 1.7, 1.1],
             ],
         )
+
+    def test_plot_slide13_breakdown_uses_requested_bracket_pairs_and_style(self):
+        fig, ax = plt.subplots()
+
+        with tempfile.TemporaryDirectory() as td:
+            output_path = Path(td) / "chart.png"
+            with patch("matplotlib.pyplot.subplots", return_value=(fig, ax)):
+                with patch("src.utils.slides.slide13_charts.close_figure"):
+                    _plot_slide13_breakdown(
+                        xlabels=["3T25", "4T25", "1T26"],
+                        series_names=["A", "B", "C"],
+                        values=np.asarray(
+                            [
+                                [1.0, 0.8, 0.7],
+                                [1.1, 0.9, 0.75],
+                                [1.2, 0.95, 0.8],
+                            ],
+                            dtype=float,
+                        ),
+                        output_path=output_path,
+                        delta_pairs=SLIDE13_DELTA_PAIRS,
+                        delta_bracket_colors=SLIDE13_DELTA_BRACKET_COLORS,
+                        delta_label_x_fractions=SLIDE13_DELTA_LABEL_X_FRACTIONS,
+                    )
+
+        bracket_lines = [line for line in ax.lines if len(line.get_xdata()) == 4]
+        self.assertEqual(len(bracket_lines), 2)
+        self.assertEqual(bracket_lines[0].get_color(), SLIDE13_DELTA_BRACKET_COLORS[0])
+        self.assertEqual(bracket_lines[1].get_color(), SLIDE13_DELTA_BRACKET_COLORS[1])
+        self.assertAlmostEqual(bracket_lines[0].get_xdata()[0], 0.0, places=2)
+        self.assertAlmostEqual(bracket_lines[0].get_xdata()[2], 0.48, places=2)
+        self.assertAlmostEqual(bracket_lines[1].get_xdata()[0], 0.24, places=2)
+        self.assertAlmostEqual(bracket_lines[1].get_xdata()[2], 0.48, places=2)
+
+        percent_texts = [text for text in ax.texts if text.get_text().startswith(("+", "-"))]
+        self.assertEqual(len(percent_texts), 2)
+        self.assertAlmostEqual(percent_texts[0].get_position()[0], 0.14, places=2)
+        self.assertAlmostEqual(percent_texts[1].get_position()[0], 0.36, places=2)
+
+        plt.close(fig)
 
 
 if __name__ == "__main__":

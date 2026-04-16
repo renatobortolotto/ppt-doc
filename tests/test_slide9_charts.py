@@ -6,6 +6,7 @@ from unittest.mock import patch
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import FancyBboxPatch
+from matplotlib.patches import Rectangle
 from openpyxl import Workbook
 
 from src.utils.slides.slide9_charts import (
@@ -20,7 +21,9 @@ from src.utils.slides.slide9_charts import (
     SLIDE9_LINE_9M_LABEL_X_OFFSETS_PTS,
     SLIDE9_LINE_LABEL_OFFSET_PTS,
     SLIDE9_LINE_TRI_LABEL_FONTSIZE,
+    SLIDE9_STACKED_BAR_WIDTH,
     SLIDE9_STACKED_FONT_SCALE,
+    SLIDE9_STACKED_GROUP_SPACING,
     SLIDE9_STACKED_LEGEND_X_OFFSET,
     SLIDE9_STACKED_XTICK_PAD,
     _plot_indice_cobertura_percent,
@@ -122,6 +125,8 @@ class TestSlide9Charts(unittest.TestCase):
                 "font_scale": SLIDE9_STACKED_FONT_SCALE,
                 "legend_x_offset": SLIDE9_STACKED_LEGEND_X_OFFSET,
                 "x_tick_pad": SLIDE9_STACKED_XTICK_PAD,
+                "bar_width": SLIDE9_STACKED_BAR_WIDTH,
+                "group_spacing": SLIDE9_STACKED_GROUP_SPACING,
             },
         )
 
@@ -139,6 +144,8 @@ class TestSlide9Charts(unittest.TestCase):
                 "font_scale": SLIDE9_STACKED_FONT_SCALE,
                 "legend_x_offset": SLIDE9_STACKED_LEGEND_X_OFFSET,
                 "x_tick_pad": SLIDE9_STACKED_XTICK_PAD,
+                "bar_width": SLIDE9_STACKED_BAR_WIDTH,
+                "group_spacing": SLIDE9_STACKED_GROUP_SPACING,
                 "delta_pairs": SLIDE9_9M_DELTA_PAIRS,
                 "delta_bracket_colors": SLIDE9_9M_DELTA_BRACKET_COLORS,
                 "delta_label_x_fractions": SLIDE9_9M_DELTA_LABEL_X_FRACTIONS,
@@ -289,6 +296,47 @@ class TestSlide9Charts(unittest.TestCase):
             if len(line.get_xdata()) == 2 and line.get_color() in {"#0B2E6B", "#5B8FF9"}
         ]
         self.assertEqual(connector_lines, [])
+
+        plt.close(fig)
+
+    def test_plot_stacked_bars_with_total_supports_custom_bar_width_and_spacing(self):
+        fig, ax = plt.subplots()
+
+        with tempfile.TemporaryDirectory() as td:
+            output_path = Path(td) / "chart.png"
+            with patch("matplotlib.pyplot.subplots", return_value=(fig, ax)):
+                with patch("src.utils.slides.slide9_charts.close_figure"):
+                    _plot_stacked_bars_with_total(
+                        xlabels=["4T24", "1T25"],
+                        series_names=["PDD Expandida", "Recuperação de Crédito"],
+                        values=np.asarray(
+                            [
+                                [40.0, -4.0],
+                                [45.0, -5.0],
+                            ],
+                            dtype=float,
+                        ),
+                        output_path=output_path,
+                        colors=["#0B2E6B", "#5B8FF9"],
+                        bar_width=SLIDE9_STACKED_BAR_WIDTH,
+                        group_spacing=SLIDE9_STACKED_GROUP_SPACING,
+                    )
+
+        bar_patches = [
+            patch
+            for patch in ax.patches
+            if isinstance(patch, Rectangle) and patch.get_width() > 0 and patch.get_height() != 0
+        ]
+        self.assertEqual(len(bar_patches), 4)
+        self.assertAlmostEqual(bar_patches[0].get_width(), SLIDE9_STACKED_BAR_WIDTH, places=2)
+
+        bar_centers = sorted(
+            {
+                round(float(patch.get_x() + patch.get_width() / 2.0), 2)
+                for patch in bar_patches
+            }
+        )
+        self.assertEqual(bar_centers, [0.0, 0.5])
 
         plt.close(fig)
 

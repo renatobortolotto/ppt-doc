@@ -12,6 +12,8 @@ SLIDE9_STACKED_FONT_SCALE = 2.0
 SLIDE9_COVERAGE_FONT_SCALE = 2.0
 SLIDE9_STACKED_LEGEND_X_OFFSET = 1.32
 SLIDE9_STACKED_XTICK_PAD = 4.0
+SLIDE9_STACKED_BAR_WIDTH = 0.31
+SLIDE9_STACKED_GROUP_SPACING = 0.50
 SLIDE9_COVERAGE_XTICK_PAD = 4.0
 SLIDE9_LINE_LABEL_FONT_SCALE = 2.0
 SLIDE9_LINE_TRI_LABEL_FONTSIZE = 56.0
@@ -89,6 +91,8 @@ def _plot_stacked_bars_with_total(
     font_scale: float = 1.0,
     legend_x_offset: float = 1.28,
     x_tick_pad: float = 8.0,
+    bar_width: float = 0.62,
+    group_spacing: float = 1.0,
     delta_pairs: tuple[tuple[int, int], ...] = (),
     delta_bracket_colors: tuple[str, ...] = (),
     delta_label_x_fractions: tuple[float, ...] = (),
@@ -107,8 +111,8 @@ def _plot_stacked_bars_with_total(
     fig.patch.set_alpha(0)
     ax.set_facecolor("none")
 
-    x = np.arange(n, dtype=float)
-    width = 0.62
+    x = np.arange(n, dtype=float) * float(group_spacing)
+    width = float(bar_width)
 
     # Stacking com suporte a segmentos positivos e negativos.
     pos_bottom = np.zeros(n, dtype=float)
@@ -433,6 +437,8 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         font_scale=SLIDE9_STACKED_FONT_SCALE,
         legend_x_offset=SLIDE9_STACKED_LEGEND_X_OFFSET,
         x_tick_pad=SLIDE9_STACKED_XTICK_PAD,
+        bar_width=SLIDE9_STACKED_BAR_WIDTH,
+        group_spacing=SLIDE9_STACKED_GROUP_SPACING,
     )
     generated.append(out19)
 
@@ -451,6 +457,8 @@ def generate_slide9_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         font_scale=SLIDE9_STACKED_FONT_SCALE,
         legend_x_offset=SLIDE9_STACKED_LEGEND_X_OFFSET,
         x_tick_pad=SLIDE9_STACKED_XTICK_PAD,
+        bar_width=SLIDE9_STACKED_BAR_WIDTH,
+        group_spacing=SLIDE9_STACKED_GROUP_SPACING,
         delta_pairs=SLIDE9_9M_DELTA_PAIRS,
         delta_bracket_colors=SLIDE9_9M_DELTA_BRACKET_COLORS,
         delta_label_x_fractions=SLIDE9_9M_DELTA_LABEL_X_FRACTIONS,

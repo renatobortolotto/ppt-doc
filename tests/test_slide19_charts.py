@@ -3,13 +3,19 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import matplotlib.pyplot as plt
 import numpy as np
 from openpyxl import Workbook
 
 from src.utils.slides.slide19_charts import (
+    SLIDE19_DELTA_BRACKET_COLORS,
+    SLIDE19_DELTA_LABEL_X_FRACTIONS,
+    SLIDE19_DELTA_PAIRS,
     SLIDE19_SEGUROS_ANOS_OUTPUT,
     SLIDE19_SEGUROS_TRIMESTRES_OUTPUT,
     SLIDE19_VEICULOS_OUTPUT,
+    _plot_simple_bars,
+    _plot_stacked_veiculos,
     generate_slide19_charts,
 )
 
@@ -45,11 +51,12 @@ class TestSlide19Charts(unittest.TestCase):
 
         captured: dict[str, object] = {"simple_calls": []}
 
-        def _capture_plot(*, xlabels, series_names, values, output_path):
+        def _capture_plot(*, xlabels, series_names, values, output_path, **kwargs):
             captured["xlabels"] = list(xlabels)
             captured["series_names"] = list(series_names)
             captured["values"] = values.tolist()
             captured["veiculos_output_name"] = Path(output_path).name
+            captured["veiculos_kwargs"] = dict(kwargs)
 
         def _capture_simple(
             *,
@@ -59,6 +66,9 @@ class TestSlide19Charts(unittest.TestCase):
             bar_color="#123A7A",
             bar_width=0.62,
             bar_slot=1.0,
+            delta_pairs=(),
+            delta_bracket_colors=(),
+            delta_label_x_fractions=(),
         ):
             captured["simple_calls"].append(
                 {
@@ -68,6 +78,9 @@ class TestSlide19Charts(unittest.TestCase):
                     "bar_color": bar_color,
                     "bar_width": bar_width,
                     "bar_slot": bar_slot,
+                    "delta_pairs": delta_pairs,
+                    "delta_bracket_colors": delta_bracket_colors,
+                    "delta_label_x_fractions": delta_label_x_fractions,
                 }
             )
 
@@ -85,6 +98,14 @@ class TestSlide19Charts(unittest.TestCase):
             [SLIDE19_VEICULOS_OUTPUT, SLIDE19_SEGUROS_TRIMESTRES_OUTPUT, SLIDE19_SEGUROS_ANOS_OUTPUT],
         )
         self.assertEqual(captured["veiculos_output_name"], SLIDE19_VEICULOS_OUTPUT)
+        self.assertEqual(
+            captured["veiculos_kwargs"],
+            {
+                "delta_pairs": SLIDE19_DELTA_PAIRS,
+                "delta_bracket_colors": SLIDE19_DELTA_BRACKET_COLORS,
+                "delta_label_x_fractions": SLIDE19_DELTA_LABEL_X_FRACTIONS,
+            },
+        )
         self.assertEqual(captured["xlabels"], ["4T24", "3T25", "4T25"])
         self.assertEqual(captured["series_names"], ["Leves Usados", "Outros Veículos"])
         np.testing.assert_allclose(
@@ -107,6 +128,9 @@ class TestSlide19Charts(unittest.TestCase):
                     "bar_color": "#123A7A",
                     "bar_width": 0.62,
                     "bar_slot": 1.0,
+                    "delta_pairs": SLIDE19_DELTA_PAIRS,
+                    "delta_bracket_colors": SLIDE19_DELTA_BRACKET_COLORS,
+                    "delta_label_x_fractions": SLIDE19_DELTA_LABEL_X_FRACTIONS,
                 },
                 {
                     "xlabels": ["2024", "2025"],
@@ -115,9 +139,84 @@ class TestSlide19Charts(unittest.TestCase):
                     "bar_color": "#123A7A",
                     "bar_width": 0.22,
                     "bar_slot": 0.38,
+                    "delta_pairs": (),
+                    "delta_bracket_colors": (),
+                    "delta_label_x_fractions": (),
                 },
             ],
         )
+
+    def test_plot_stacked_veiculos_uses_slide15_bracket_style(self):
+        fig, ax = plt.subplots()
+
+        with tempfile.TemporaryDirectory() as td:
+            output_path = Path(td) / "chart.png"
+            with patch("matplotlib.pyplot.subplots", return_value=(fig, ax)):
+                with patch("src.utils.slides.slide19_charts.close_figure"):
+                    _plot_stacked_veiculos(
+                        xlabels=["4T24", "3T25", "4T25"],
+                        series_names=["Leves Usados", "Outros Veículos"],
+                        values=np.asarray(
+                            [
+                                [42.236, 5.767],
+                                [44.852, 7.175],
+                                [46.888, 7.816],
+                            ],
+                            dtype=float,
+                        ),
+                        output_path=output_path,
+                        delta_pairs=SLIDE19_DELTA_PAIRS,
+                        delta_bracket_colors=SLIDE19_DELTA_BRACKET_COLORS,
+                        delta_label_x_fractions=SLIDE19_DELTA_LABEL_X_FRACTIONS,
+                    )
+
+        bracket_lines = [line for line in ax.lines if len(line.get_xdata()) == 4]
+        self.assertEqual(len(bracket_lines), 2)
+        self.assertEqual(bracket_lines[0].get_color(), SLIDE19_DELTA_BRACKET_COLORS[0])
+        self.assertEqual(bracket_lines[1].get_color(), SLIDE19_DELTA_BRACKET_COLORS[1])
+        self.assertAlmostEqual(bracket_lines[0].get_xdata()[0], 0.0, places=2)
+        self.assertAlmostEqual(bracket_lines[0].get_xdata()[2], 2.0, places=2)
+        self.assertAlmostEqual(bracket_lines[1].get_xdata()[0], 1.0, places=2)
+        self.assertAlmostEqual(bracket_lines[1].get_xdata()[2], 2.0, places=2)
+
+        bracket_texts = [text for text in ax.texts if text.get_text().startswith(("+", "-"))]
+        self.assertEqual(len(bracket_texts), 2)
+        self.assertAlmostEqual(bracket_texts[0].get_position()[0], 0.60, places=2)
+        self.assertAlmostEqual(bracket_texts[1].get_position()[0], 1.50, places=2)
+
+        plt.close(fig)
+
+    def test_plot_simple_bars_uses_slide15_bracket_style(self):
+        fig, ax = plt.subplots()
+
+        with tempfile.TemporaryDirectory() as td:
+            output_path = Path(td) / "chart.png"
+            with patch("matplotlib.pyplot.subplots", return_value=(fig, ax)):
+                with patch("src.utils.slides.slide19_charts.close_figure"):
+                    _plot_simple_bars(
+                        xlabels=["4T24", "3T25", "4T25"],
+                        values=[420.0, 354.0, 418.0],
+                        output_path=output_path,
+                        delta_pairs=SLIDE19_DELTA_PAIRS,
+                        delta_bracket_colors=SLIDE19_DELTA_BRACKET_COLORS,
+                        delta_label_x_fractions=SLIDE19_DELTA_LABEL_X_FRACTIONS,
+                    )
+
+        bracket_lines = [line for line in ax.lines if len(line.get_xdata()) == 4]
+        self.assertEqual(len(bracket_lines), 2)
+        self.assertEqual(bracket_lines[0].get_color(), SLIDE19_DELTA_BRACKET_COLORS[0])
+        self.assertEqual(bracket_lines[1].get_color(), SLIDE19_DELTA_BRACKET_COLORS[1])
+        self.assertAlmostEqual(bracket_lines[0].get_xdata()[0], 0.0, places=2)
+        self.assertAlmostEqual(bracket_lines[0].get_xdata()[2], 2.0, places=2)
+        self.assertAlmostEqual(bracket_lines[1].get_xdata()[0], 1.0, places=2)
+        self.assertAlmostEqual(bracket_lines[1].get_xdata()[2], 2.0, places=2)
+
+        bracket_texts = [text for text in ax.texts if text.get_text().startswith(("+", "-"))]
+        self.assertEqual(len(bracket_texts), 2)
+        self.assertAlmostEqual(bracket_texts[0].get_position()[0], 0.60, places=2)
+        self.assertAlmostEqual(bracket_texts[1].get_position()[0], 1.50, places=2)
+
+        plt.close(fig)
 
 
 if __name__ == "__main__":

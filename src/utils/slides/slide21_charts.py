@@ -18,6 +18,9 @@ SLIDE21_STACKED_FIGSIZE = (7.4, 3.0)
 SLIDE21_STACKED_BAR_SLOT = 0.24
 SLIDE21_STACKED_BAR_WIDTH = 0.20
 SLIDE21_STACKED_FONT_SCALE = 1.2
+SLIDE21_DELTA_PAIRS = ((0, 2), (1, 2))
+SLIDE21_DELTA_BRACKET_COLORS = ("#123a7a", "#2f2f2f")
+SLIDE21_DELTA_LABEL_X_FRACTIONS = (0.30, 0.50)
 SLIDE21_COMPARATIVE_FIGSIZE = (13.6, 4.8)
 SLIDE21_COMPARATIVE_BAR_WIDTH = 0.36
 SLIDE21_COMPARATIVE_FONT_SCALE = 1.7
@@ -181,6 +184,9 @@ def _plot_stacked_atacado(
     series_names: list[str],
     values: np.ndarray,
     output_path: Path,
+    delta_pairs: tuple[tuple[int, int], ...] = (),
+    delta_bracket_colors: tuple[str, ...] = (),
+    delta_label_x_fractions: tuple[float, ...] = (),
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import to_rgba
@@ -290,24 +296,50 @@ def _plot_stacked_atacado(
         top_base = float(top_labels_max) + max(abs_max * 0.08, 0.32)
         max_text_y: float | None = None
 
-        for i in range(1, n):
-            prev = float(totals[i - 1])
-            curr = float(totals[i])
+        pairs = list(delta_pairs) if delta_pairs else [(i - 1, i) for i in range(1, n)]
+
+        def _norm_index(idx: int) -> int:
+            return idx + n if idx < 0 else idx
+
+        norm_pairs: list[tuple[int, int]] = []
+        for prev_i, curr_i in pairs:
+            pi = _norm_index(int(prev_i))
+            ci = _norm_index(int(curr_i))
+            if pi < 0 or pi >= n or ci < 0 or ci >= n or pi == ci:
+                continue
+            norm_pairs.append((pi, ci))
+
+        for level, (pi, ci) in enumerate(norm_pairs):
+            prev = float(totals[pi])
+            curr = float(totals[ci])
             if not np.isfinite(prev) or not np.isfinite(curr) or prev == 0:
                 continue
-            x1 = float(x[i - 1])
-            x2 = float(x[i])
+            x1 = float(x[pi])
+            x2 = float(x[ci])
+            bracket_color = "#2f2f2f"
+            if level < len(delta_bracket_colors):
+                candidate_color = str(delta_bracket_colors[level]).strip()
+                if candidate_color:
+                    bracket_color = candidate_color
             ax.plot(
                 [x1, x1, x2, x2],
                 [top_base, top_base + bracket_h, top_base + bracket_h, top_base],
-                color="#2f2f2f",
+                color=bracket_color,
                 linewidth=1.2,
                 solid_capstyle="round",
                 zorder=4,
             )
             text_y = top_base + bracket_h + offset_y * 0.25
+            label_fraction = 0.50
+            if level < len(delta_label_x_fractions):
+                try:
+                    candidate_fraction = float(delta_label_x_fractions[level])
+                except (TypeError, ValueError):
+                    candidate_fraction = label_fraction
+                if np.isfinite(candidate_fraction):
+                    label_fraction = min(max(candidate_fraction, 0.0), 1.0)
             ax.text(
-                (x1 + x2) / 2.0,
+                x1 + (x2 - x1) * label_fraction,
                 text_y,
                 _fmt_bracket_pct(curr, prev),
                 ha="center",
@@ -504,6 +536,9 @@ def generate_slide21_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         series_names=stacked_series_names,
         values=stacked_values,
         output_path=stacked_output,
+        delta_pairs=SLIDE21_DELTA_PAIRS,
+        delta_bracket_colors=SLIDE21_DELTA_BRACKET_COLORS,
+        delta_label_x_fractions=SLIDE21_DELTA_LABEL_X_FRACTIONS,
     )
 
     comparative_categories = [

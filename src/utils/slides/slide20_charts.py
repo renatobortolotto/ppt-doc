@@ -27,6 +27,9 @@ SLIDE20_SIMPLE_FIGSIZE = (6.5, 3.1)
 SLIDE20_SIMPLE_BAR_WIDTH = 0.62
 SLIDE20_SIMPLE_BAR_SLOT = 1.0
 SLIDE20_SIMPLE_FONT_SCALE = 1.4
+SLIDE20_DELTA_PAIRS = ((0, 2), (1, 2))
+SLIDE20_DELTA_BRACKET_COLORS = ("#123a7a", "#2f2f2f")
+SLIDE20_DELTA_LABEL_X_FRACTIONS = (0.30, 0.50)
 
 
 def _read_range_row(ws, cell_range: str) -> list[object]:
@@ -89,6 +92,9 @@ def _plot_stacked_bars(
     values: np.ndarray,  # [n_bars, n_series]
     output_path: Path,
     colors: list[str],
+    delta_pairs: tuple[tuple[int, int], ...] = (),
+    delta_bracket_colors: tuple[str, ...] = (),
+    delta_label_x_fractions: tuple[float, ...] = (),
 ) -> None:
     import matplotlib.pyplot as plt
     from matplotlib.colors import to_rgba
@@ -170,24 +176,50 @@ def _plot_stacked_bars(
         top_base = float(top_labels_max) + max(abs_max * 0.07, 0.22)
         max_text_y: float | None = None
 
-        for i in range(1, n):
-            prev = float(totals[i - 1])
-            curr = float(totals[i])
+        pairs = list(delta_pairs) if delta_pairs else [(i - 1, i) for i in range(1, n)]
+
+        def _norm_index(idx: int) -> int:
+            return idx + n if idx < 0 else idx
+
+        norm_pairs: list[tuple[int, int]] = []
+        for prev_i, curr_i in pairs:
+            pi = _norm_index(int(prev_i))
+            ci = _norm_index(int(curr_i))
+            if pi < 0 or pi >= n or ci < 0 or ci >= n or pi == ci:
+                continue
+            norm_pairs.append((pi, ci))
+
+        for level, (pi, ci) in enumerate(norm_pairs):
+            prev = float(totals[pi])
+            curr = float(totals[ci])
             if not np.isfinite(prev) or not np.isfinite(curr) or abs(prev) < 1e-12:
                 continue
-            x1 = float(x[i - 1])
-            x2 = float(x[i])
+            x1 = float(x[pi])
+            x2 = float(x[ci])
             text_y = top_base + bracket_h + offset_y * 0.25
+            bracket_color = "#2f2f2f"
+            if level < len(delta_bracket_colors):
+                candidate_color = str(delta_bracket_colors[level]).strip()
+                if candidate_color:
+                    bracket_color = candidate_color
             ax.plot(
                 [x1, x1, x2, x2],
                 [top_base, top_base + bracket_h, top_base + bracket_h, top_base],
-                color="#2f2f2f",
+                color=bracket_color,
                 linewidth=1.2,
                 solid_capstyle="round",
                 zorder=4,
             )
+            label_fraction = 0.50
+            if level < len(delta_label_x_fractions):
+                try:
+                    candidate_fraction = float(delta_label_x_fractions[level])
+                except (TypeError, ValueError):
+                    candidate_fraction = label_fraction
+                if np.isfinite(candidate_fraction):
+                    label_fraction = min(max(candidate_fraction, 0.0), 1.0)
             ax.text(
-                (x1 + x2) / 2.0,
+                x1 + (x2 - x1) * label_fraction,
                 text_y,
                 _fmt_bracket_pct(curr, prev),
                 ha="center",
@@ -261,6 +293,9 @@ def _plot_simple_bars(
     values: list[float] | np.ndarray,
     output_path: Path,
     bar_color: str = SLIDE20_SIMPLE_BAR_COLOR,
+    delta_pairs: tuple[tuple[int, int], ...] = (),
+    delta_bracket_colors: tuple[str, ...] = (),
+    delta_label_x_fractions: tuple[float, ...] = (),
 ) -> None:
     import matplotlib.pyplot as plt
 
@@ -303,24 +338,50 @@ def _plot_simple_bars(
         top_base = float(top_labels_max) + max(abs_max * 0.08, 0.28)
         max_text_y: float | None = None
 
-        for i in range(1, n):
-            prev = float(vals[i - 1])
-            curr = float(vals[i])
+        pairs = list(delta_pairs) if delta_pairs else [(i - 1, i) for i in range(1, n)]
+
+        def _norm_index(idx: int) -> int:
+            return idx + n if idx < 0 else idx
+
+        norm_pairs: list[tuple[int, int]] = []
+        for prev_i, curr_i in pairs:
+            pi = _norm_index(int(prev_i))
+            ci = _norm_index(int(curr_i))
+            if pi < 0 or pi >= n or ci < 0 or ci >= n or pi == ci:
+                continue
+            norm_pairs.append((pi, ci))
+
+        for level, (pi, ci) in enumerate(norm_pairs):
+            prev = float(vals[pi])
+            curr = float(vals[ci])
             if not np.isfinite(prev) or not np.isfinite(curr) or abs(prev) < 1e-12:
                 continue
-            x1 = float(x[i - 1])
-            x2 = float(x[i])
+            x1 = float(x[pi])
+            x2 = float(x[ci])
             text_y = top_base + bracket_h + offset_y * 0.25
+            bracket_color = "#2f2f2f"
+            if level < len(delta_bracket_colors):
+                candidate_color = str(delta_bracket_colors[level]).strip()
+                if candidate_color:
+                    bracket_color = candidate_color
             ax.plot(
                 [x1, x1, x2, x2],
                 [top_base, top_base + bracket_h, top_base + bracket_h, top_base],
-                color="#2f2f2f",
+                color=bracket_color,
                 linewidth=1.2,
                 solid_capstyle="round",
                 zorder=4,
             )
+            label_fraction = 0.50
+            if level < len(delta_label_x_fractions):
+                try:
+                    candidate_fraction = float(delta_label_x_fractions[level])
+                except (TypeError, ValueError):
+                    candidate_fraction = label_fraction
+                if np.isfinite(candidate_fraction):
+                    label_fraction = min(max(candidate_fraction, 0.0), 1.0)
             ax.text(
-                (x1 + x2) / 2.0,
+                x1 + (x2 - x1) * label_fraction,
                 text_y,
                 _fmt_bracket_pct(curr, prev),
                 ha="center",
@@ -375,6 +436,9 @@ def generate_slide20_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         values=emprestimos_values,
         output_path=emprestimos_output,
         colors=[color for _, color in SLIDE20_STACKED_SERIES],
+        delta_pairs=SLIDE20_DELTA_PAIRS,
+        delta_bracket_colors=SLIDE20_DELTA_BRACKET_COLORS,
+        delta_label_x_fractions=SLIDE20_DELTA_LABEL_X_FRACTIONS,
     )
 
     xlabels_seg = [("" if v is None else str(v)).strip() for v in _read_range_row(ws_seguros, "D11:F11")]
@@ -384,6 +448,9 @@ def generate_slide20_charts(*, xlsx_path: Path, output_dir: Path) -> list[Path]:
         xlabels=xlabels_seg,
         values=seguros_values,
         output_path=seguros_output,
+        delta_pairs=SLIDE20_DELTA_PAIRS,
+        delta_bracket_colors=SLIDE20_DELTA_BRACKET_COLORS,
+        delta_label_x_fractions=SLIDE20_DELTA_LABEL_X_FRACTIONS,
     )
 
     return [emprestimos_output, seguros_output]

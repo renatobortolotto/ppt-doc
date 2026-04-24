@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,6 +39,7 @@ from src.utils.xlsx_text_fields import (
 
 
 ChartGeneratorFn = Callable[..., list[Path]]
+PERIOD_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([1-4]T[0-9]{2})(?![A-Za-z0-9])", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,26 @@ def resolve_path(repo_root: Path, path_value: str) -> Path:
     if path.is_absolute():
         return path
     return (repo_root / path).resolve()
+
+
+def extract_period_token(filename: str | Path | None) -> str | None:
+    if filename is None:
+        return None
+    match = PERIOD_TOKEN_RE.search(Path(str(filename)).stem)
+    if not match:
+        return None
+    return match.group(1).upper()
+
+
+def output_filename_for_xlsx(
+    xlsx_filename: str | Path | None,
+    *,
+    fallback_filename: str | Path,
+) -> str:
+    period_token = extract_period_token(xlsx_filename)
+    if period_token:
+        return f"PPT_{period_token}.pptx"
+    return Path(str(fallback_filename)).name
 
 
 def load_job_config(repo_root: Path) -> Dict[str, Any]:
@@ -475,7 +497,13 @@ def build_presentation(
     if normalized_only_slides and skip_charts:
         raise ValueError("only_slides nao pode ser usado junto com skip_charts")
 
-    effective_output_path = output_path or resolve_path(repo_root, str(cfg.get("pptx_output")))
+    configured_output_path = resolve_path(repo_root, str(cfg.get("pptx_output") or "presentation.updated.pptx"))
+    effective_output_path = output_path or configured_output_path.with_name(
+        output_filename_for_xlsx(
+            xlsx_path.name,
+            fallback_filename=configured_output_path.name,
+        )
+    )
     effective_images_dir = images_dir or resolve_path(repo_root, str(cfg.get("images_dir", ".")))
 
     pptx_template = resolve_path(repo_root, str(cfg.get("pptx_template")))
@@ -555,6 +583,7 @@ def build_presentation_from_bytes(
     repo_root: Path,
     cfg: Mapping[str, Any],
     xlsx_bytes: bytes,
+    xlsx_filename: str | None = None,
     llm_payload: object | None = None,
     skip_charts: bool = False,
 ) -> tuple[bytes, BuildPresentationResult]:
@@ -567,7 +596,13 @@ def build_presentation_from_bytes(
         xlsx_path.write_bytes(xlsx_bytes)
 
         images_dir = tmp_root / "images"
-        output_filename = str(cfg.get("api_output_filename") or cfg.get("pptx_output") or "presentation.updated.pptx")
+        fallback_output_filename = str(
+            cfg.get("api_output_filename") or cfg.get("pptx_output") or "presentation.updated.pptx"
+        )
+        output_filename = output_filename_for_xlsx(
+            xlsx_filename,
+            fallback_filename=fallback_output_filename,
+        )
         output_path = tmp_root / Path(output_filename).name
 
         result = build_presentation(

@@ -36,6 +36,8 @@ def _parse_llm_payload(llm_response_bytes: bytes) -> object:
 def _build_presentation_artifact(
     xlsx_bytes: bytes,
     llm_response_bytes: bytes,
+    *,
+    xlsx_filename: str | None = None,
 ) -> Tuple[bytes, str, Any]:
     repo_root = _repo_root()
     cfg = load_job_config(repo_root)
@@ -44,16 +46,24 @@ def _build_presentation_artifact(
         repo_root=repo_root,
         cfg=cfg,
         xlsx_bytes=xlsx_bytes,
+        xlsx_filename=xlsx_filename,
         llm_payload=llm_payload,
     )
-    filename = Path(
-        str(cfg.get("api_output_filename") or cfg.get("pptx_output") or "presentation.updated.pptx")
-    ).name
+    filename = result.output_path.name
     return pptx_bytes, filename, result
 
 
-def compose_presentation_from_inputs(xlsx_bytes: bytes, llm_response_bytes: bytes) -> Dict[str, Any]:
-    pptx_bytes, filename, result = _build_presentation_artifact(xlsx_bytes, llm_response_bytes)
+def compose_presentation_from_inputs(
+    xlsx_bytes: bytes,
+    llm_response_bytes: bytes,
+    *,
+    xlsx_filename: str | None = None,
+) -> Dict[str, Any]:
+    pptx_bytes, filename, result = _build_presentation_artifact(
+        xlsx_bytes,
+        llm_response_bytes,
+        xlsx_filename=xlsx_filename,
+    )
     return serialize_build_response(
         pptx_bytes=pptx_bytes,
         filename=filename,
@@ -61,8 +71,17 @@ def compose_presentation_from_inputs(xlsx_bytes: bytes, llm_response_bytes: byte
     )
 
 
-def compose_presentation_download_response(xlsx_bytes: bytes, llm_response_bytes: bytes):
-    pptx_bytes, filename, _result = _build_presentation_artifact(xlsx_bytes, llm_response_bytes)
+def compose_presentation_download_response(
+    xlsx_bytes: bytes,
+    llm_response_bytes: bytes,
+    *,
+    xlsx_filename: str | None = None,
+):
+    pptx_bytes, filename, _result = _build_presentation_artifact(
+        xlsx_bytes,
+        llm_response_bytes,
+        xlsx_filename=xlsx_filename,
+    )
     return build_file_response(
         body=pptx_bytes,
         filename=filename,
@@ -90,6 +109,16 @@ def _read_upload_bytes(upload: Any) -> bytes:
             return bytes(data)
         raise TypeError("Campo de upload retornou conteudo nao binario")
     raise TypeError("Campo de upload nao suportado")
+
+
+def _upload_filename(upload: Any) -> str | None:
+    if upload is None:
+        return None
+    for attr_name in ("filename", "file_name", "original_filename", "name"):
+        value = getattr(upload, attr_name, None)
+        if value:
+            return Path(str(value)).name
+    return None
 
 
 def _first_value(mapping: Mapping[str, Any] | None, *keys: str) -> Any:
@@ -125,7 +154,7 @@ def _json_to_bytes(value: Any, *, field_name: str) -> bytes:
         raise ValueError(f"Campo {field_name} nao pode ser serializado em JSON") from exc
 
 
-def _extract_request_payload(request_obj: Any) -> tuple[bytes, bytes]:
+def _extract_request_payload(request_obj: Any) -> tuple[bytes, bytes, str | None]:
     files = getattr(request_obj, "files", None) or {}
     form = getattr(request_obj, "form", None) or {}
 
@@ -135,6 +164,7 @@ def _extract_request_payload(request_obj: Any) -> tuple[bytes, bytes]:
 
     if xlsx_upload is not None:
         xlsx_bytes = _read_upload_bytes(xlsx_upload)
+        xlsx_filename = _upload_filename(xlsx_upload)
         llm_bytes = _read_upload_bytes(llm_upload) if llm_upload is not None else _json_to_bytes(
             llm_form_value,
             field_name="llm_response_json",
@@ -143,7 +173,7 @@ def _extract_request_payload(request_obj: Any) -> tuple[bytes, bytes]:
             raise ValueError(
                 "Envie o JSON da LLM em llm_response_file ou llm_response_json junto com o xlsx_file"
             )
-        return xlsx_bytes, llm_bytes
+        return xlsx_bytes, llm_bytes, xlsx_filename
 
     json_payload = None
     if hasattr(request_obj, "get_json"):
@@ -159,6 +189,13 @@ def _extract_request_payload(request_obj: Any) -> tuple[bytes, bytes]:
             "xlsx_base64",
             "xlsx_file_base64",
             "file",
+        )
+        xlsx_filename = _first_value(
+            json_payload,
+            "xlsxFilename",
+            "xlsx_filename",
+            "xlsxFileName",
+            "filename",
         )
         llm_base64 = _first_value(
             json_payload,
@@ -181,7 +218,7 @@ def _extract_request_payload(request_obj: Any) -> tuple[bytes, bytes]:
             raise ValueError(
                 "No corpo JSON, envie xlsxBase64 + llmResponseBase64 ou xlsxBase64 + llmResponse"
             )
-        return xlsx_bytes, llm_bytes
+        return xlsx_bytes, llm_bytes, Path(str(xlsx_filename)).name if xlsx_filename else None
 
     raise ValueError(
         "Requisicao sem payload suportado. Use multipart/form-data com xlsx_file + llm_response_file "
@@ -192,8 +229,12 @@ def _extract_request_payload(request_obj: Any) -> tuple[bytes, bytes]:
 def handle_build_pptx_request(request_obj: Any | None = None):
     active_request = request_obj or request
     try:
-        xlsx_bytes, llm_response_bytes = _extract_request_payload(active_request)
-        return compose_presentation_download_response(xlsx_bytes, llm_response_bytes)
+        xlsx_bytes, llm_response_bytes, xlsx_filename = _extract_request_payload(active_request)
+        return compose_presentation_download_response(
+            xlsx_bytes,
+            llm_response_bytes,
+            xlsx_filename=xlsx_filename,
+        )
     except ValueError as exc:
         logging.warning("Requisicao invalida para build-pptx: %s", exc)
         return build_error_response(

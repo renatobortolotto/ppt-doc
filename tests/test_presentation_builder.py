@@ -16,10 +16,12 @@ from presentation_builder import (
     build_presentation,
     build_presentation_from_bytes,
     build_text_mapping,
+    extract_period_token,
     build_text_mapping_with_failures,
     generate_chart_assets,
     load_job_config,
     load_llm_mapping_from_payload,
+    output_filename_for_xlsx,
     resolve_path,
     _chart_generators,
     _persist_generated_chart_files,
@@ -48,6 +50,23 @@ class TestPresentationBuilder(unittest.TestCase):
         mapping = load_llm_mapping_from_payload(payload)
         self.assertEqual(mapping["slide1_title"], "Titulo")
         self.assertEqual(mapping["slide1_subtitle"], "Subtitulo")
+
+    def test_output_filename_for_xlsx_uses_quarter_token(self):
+        self.assertEqual(extract_period_token("Saída RGR_4T25_RI.xlsx"), "4T25")
+        self.assertEqual(
+            output_filename_for_xlsx(
+                "Saída RGR_4t25_RI.xlsx",
+                fallback_filename="main_testing.pptx",
+            ),
+            "PPT_4T25.pptx",
+        )
+        self.assertEqual(
+            output_filename_for_xlsx(
+                "arquivo_sem_periodo.xlsx",
+                fallback_filename="nested/main_testing.pptx",
+            ),
+            "main_testing.pptx",
+        )
 
     def test_build_text_mapping_merges_filtered_llm_fields(self):
         llm_payload = {
@@ -558,6 +577,46 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertEqual(result.replaced_text, 3)
         self.assertEqual(result.generated_chart_count, 4)
         self.assertEqual(result.applied_text_keys, ("slide1_title",))
+
+    def test_build_presentation_from_bytes_uses_xlsx_period_in_output_filename(self):
+        cfg = dict(self.cfg)
+
+        def _fake_build_presentation(
+            *,
+            repo_root,
+            cfg,
+            xlsx_path,
+            llm_payload,
+            output_path,
+            images_dir,
+            skip_charts,
+        ):
+            self.assertEqual(output_path.name, "PPT_4T25.pptx")
+            output_path.write_bytes(b"pptx-bytes")
+            return BuildPresentationResult(
+                output_path=output_path,
+                replaced_pictures=0,
+                replaced_placeholders=0,
+                replaced_text=0,
+                generated_chart_count=0,
+                chart_failures=(),
+                text_field_failures=(),
+                applied_text_keys=(),
+            )
+
+        with patch(
+            "presentation_builder.build_presentation",
+            side_effect=_fake_build_presentation,
+        ):
+            pptx_bytes, result = build_presentation_from_bytes(
+                repo_root=self.repo_root,
+                cfg=cfg,
+                xlsx_bytes=b"xlsx-bytes",
+                xlsx_filename="Saída RGR_4T25_RI.xlsx",
+            )
+
+        self.assertEqual(pptx_bytes, b"pptx-bytes")
+        self.assertEqual(result.output_path, Path("PPT_4T25.pptx"))
 
 
 if __name__ == "__main__":

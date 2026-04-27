@@ -475,6 +475,71 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertEqual(result.generated_chart_count, 1)
         self.assertEqual(result.text_field_failures, text_failures)
 
+    def test_build_presentation_escapes_result_metadata(self):
+        fake_result = (
+            3,
+            0,
+            2,
+            [],
+            [],
+            ['slide1_title"><script>alert(1)</script>'],
+        )
+        chart_failures = (
+            ChartGenerationFailure(
+                generator_key='slide4"><script>',
+                label='slide 4 <script>alert("x")</script>',
+                output_files=('<img src=x onerror=alert(1)>.png',),
+                error='Valor <script>alert(1)</script>',
+            ),
+        )
+        text_failures = (
+            TextFieldFailure(
+                field_id='ROE"><script>',
+                sheet="DRE <b>Saida</b>",
+                a1_range='K20"><script>',
+                error="Aba <script>alert(1)</script>",
+            ),
+        )
+
+        with (
+            patch("presentation_builder._load_validated_workbook") as load_workbook_mock,
+            patch(
+                "presentation_builder._load_text_fields_config",
+                return_value=(self.repo_root / "config" / "text_fields.json", "DRE Saida", ()),
+            ),
+            patch(
+                "presentation_builder.generate_chart_assets",
+                return_value=ChartGenerationResult(
+                    generated_files=(Path("03_roe_trimestres.png"),),
+                    failures=chart_failures,
+                ),
+            ),
+            patch(
+                "presentation_builder.build_text_mapping_with_failures",
+                return_value=TextFieldExtractionResult(
+                    mapping={"slide1_title": "Titulo"},
+                    failures=text_failures,
+                ),
+            ),
+            patch(
+                "presentation_builder.update_presentation",
+                return_value=fake_result,
+            ),
+        ):
+            load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
+            result = build_presentation(
+                repo_root=self.repo_root,
+                cfg=self.cfg,
+                xlsx_path=self.repo_root / "testing.xlsx",
+            )
+
+        self.assertIn("&lt;script&gt;", result.chart_failures[0].label)
+        self.assertIn("&lt;img", result.chart_failures[0].output_files[0])
+        self.assertIn("&lt;b&gt;", result.text_field_failures[0].sheet)
+        self.assertIn("&lt;script&gt;", result.text_field_failures[0].error)
+        self.assertIn("&lt;script&gt;", result.applied_text_keys[0])
+        self.assertNotIn("<script>", result.applied_text_keys[0])
+
     def test_resolve_path_supports_relative_and_absolute_inputs(self):
         relative = resolve_path(self.repo_root, "config/job_config.json")
         absolute_input = Path("/tmp/ppt-doc-absolute.json")

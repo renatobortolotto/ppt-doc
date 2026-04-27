@@ -79,11 +79,11 @@ def serialize_build_response(*, pptx_bytes: bytes, filename: str, result: Any) -
     chart_failures = getattr(result, "chart_failures", ())
     text_field_failures = getattr(result, "text_field_failures", ())
     payload = {
-        "filename": sanitize_response_text(filename),
+        "filename": escape(str(filename), quote=True),
         "contentType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "pptxBase64": base64.b64encode(pptx_bytes).decode("ascii"),
         "summary": {
-            "outputPath": sanitize_response_text(result.output_path),
+            "outputPath": escape(str(result.output_path), quote=True),
             "replacedPictures": result.replaced_pictures,
             "replacedPlaceholders": result.replaced_placeholders,
             "replacedText": result.replaced_text,
@@ -91,28 +91,32 @@ def serialize_build_response(*, pptx_bytes: bytes, filename: str, result: Any) -
             "chartFailureCount": len(chart_failures),
             "chartFailures": [
                 {
-                    "generatorKey": sanitize_response_text(failure.generator_key),
-                    "label": sanitize_response_text(failure.label),
+                    "generatorKey": escape(str(failure.generator_key), quote=True),
+                    "label": escape(str(failure.label), quote=True),
                     "outputFiles": [
-                        sanitize_response_text(output_file)
+                        escape(str(output_file), quote=True)
                         for output_file in failure.output_files
                     ],
-                    "error": sanitize_response_text(failure.error),
+                    "error": escape(str(failure.error), quote=True),
                 }
                 for failure in chart_failures
             ],
             "textFieldFailureCount": len(text_field_failures),
             "textFieldFailures": [
                 {
-                    "fieldId": sanitize_response_text(failure.field_id),
-                    "sheet": sanitize_response_optional_text(failure.sheet),
-                    "range": sanitize_response_text(failure.a1_range),
-                    "error": sanitize_response_text(failure.error),
+                    "fieldId": escape(str(failure.field_id), quote=True),
+                    "sheet": (
+                        None
+                        if failure.sheet is None
+                        else escape(str(failure.sheet), quote=True)
+                    ),
+                    "range": escape(str(failure.a1_range), quote=True),
+                    "error": escape(str(failure.error), quote=True),
                 }
                 for failure in text_field_failures
             ],
             "appliedTextKeys": [
-                sanitize_response_text(key)
+                escape(str(key), quote=True)
                 for key in getattr(result, "applied_text_keys", ())
             ],
         },

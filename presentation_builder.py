@@ -82,7 +82,10 @@ class BuildPresentationResult:
 
 
 def resolve_path(repo_root: Path, path_value: str) -> Path:
-    safe_path_value = str(path_value).strip()
+    raw_path_value = str(path_value).strip()
+    safe_path_value = html.escape(raw_path_value, quote=True)
+    if safe_path_value != raw_path_value:
+        raise ValueError("Caminho configurado contem caracteres invalidos")
     if not safe_path_value:
         raise ValueError("Caminho configurado invalido")
     if safe_path_value.startswith(("/", "~")):

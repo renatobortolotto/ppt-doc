@@ -68,6 +68,22 @@ class TestPresentationBuilder(unittest.TestCase):
             "main_testing.pptx",
         )
 
+    def test_output_filename_for_xlsx_neutralizes_html_sensitive_fallback(self):
+        self.assertEqual(
+            output_filename_for_xlsx(
+                None,
+                fallback_filename='evil<script>alert(1).pptx',
+            ),
+            "evil_script_alert(1).pptx",
+        )
+        self.assertEqual(
+            output_filename_for_xlsx(
+                'evil<script>_4T25.xlsx',
+                fallback_filename='fallback<script>.pptx',
+            ),
+            "PPT_4T25.pptx",
+        )
+
     def test_build_text_mapping_merges_filtered_llm_fields(self):
         llm_payload = {
             "response": {

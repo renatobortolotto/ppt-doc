@@ -40,6 +40,9 @@ from src.utils.xlsx_text_fields import (
 
 ChartGeneratorFn = Callable[..., list[Path]]
 PERIOD_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([1-4]T[0-9]{2})(?![A-Za-z0-9])", re.IGNORECASE)
+OUTPUT_FILENAME_UNSAFE_CHARS_RE = re.compile(r"""[\x00-\x1f\x7f<>:"/\\|?*&'`;]""")
+DEFAULT_OUTPUT_FILENAME = "presentation.updated.pptx"
+MAX_OUTPUT_FILENAME_LENGTH = 180
 
 
 @dataclass(frozen=True)
@@ -92,6 +95,31 @@ def extract_period_token(filename: str | Path | None) -> str | None:
     return match.group(1).upper()
 
 
+def _safe_output_filename(
+    filename: str | Path | None,
+    *,
+    default_filename: str = DEFAULT_OUTPUT_FILENAME,
+) -> str:
+    raw_name = Path(str(filename or "")).name
+    safe_name = OUTPUT_FILENAME_UNSAFE_CHARS_RE.sub("_", raw_name)
+    safe_name = re.sub(r"\s+", " ", safe_name).strip(" ._")
+
+    if not safe_name:
+        safe_name = default_filename
+
+    if Path(safe_name).suffix.lower() != ".pptx":
+        stem = safe_name.rstrip(".") or Path(default_filename).stem
+        safe_name = f"{stem}.pptx"
+
+    if len(safe_name) > MAX_OUTPUT_FILENAME_LENGTH:
+        suffix = Path(safe_name).suffix or ".pptx"
+        stem_limit = MAX_OUTPUT_FILENAME_LENGTH - len(suffix)
+        stem = Path(safe_name).stem[:stem_limit].rstrip(" ._")
+        safe_name = f"{stem or Path(default_filename).stem}{suffix}"
+
+    return safe_name
+
+
 def output_filename_for_xlsx(
     xlsx_filename: str | Path | None,
     *,
@@ -99,8 +127,8 @@ def output_filename_for_xlsx(
 ) -> str:
     period_token = extract_period_token(xlsx_filename)
     if period_token:
-        return f"PPT_{period_token}.pptx"
-    return Path(str(fallback_filename)).name
+        return _safe_output_filename(f"PPT_{period_token}.pptx")
+    return _safe_output_filename(fallback_filename)
 
 
 def load_job_config(repo_root: Path) -> Dict[str, Any]:

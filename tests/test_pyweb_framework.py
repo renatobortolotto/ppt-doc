@@ -11,6 +11,7 @@ from src.application.build_pptx import (
     compose_presentation_download_response,
     handle_build_pptx_request,
 )
+from src.application.response_safety import build_file_response
 from src.infrastructure.framework_compat import Resource
 from src.routes import create_routes
 
@@ -160,6 +161,18 @@ class TestPyWebFramework(unittest.TestCase):
         self.assertEqual(response.headers.get("Content-Type"), PPTX_CONTENT_TYPE)
         self.assertIn("attachment;", response.headers.get("Content-Disposition", ""))
         self.assertIn("main_testing.pptx", response.headers.get("Content-Disposition", ""))
+        self.assertEqual(response.get_data(), b"pptx-bytes")
+
+    def test_build_file_response_neutralizes_html_sensitive_filename(self):
+        response = build_file_response(
+            body=b"pptx-bytes",
+            filename='evil<script>alert(1).pptx',
+            content_type=PPTX_CONTENT_TYPE,
+        )
+
+        content_disposition = response.headers.get("Content-Disposition", "")
+        self.assertNotIn("<script>", content_disposition)
+        self.assertIn("evil_script_alert(1).pptx", content_disposition)
         self.assertEqual(response.get_data(), b"pptx-bytes")
 
     def test_handle_build_pptx_request_returns_400_for_missing_payload(self):

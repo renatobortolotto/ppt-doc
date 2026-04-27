@@ -475,7 +475,7 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertEqual(result.generated_chart_count, 1)
         self.assertEqual(result.text_field_failures, text_failures)
 
-    def test_build_presentation_escapes_result_metadata(self):
+    def test_build_presentation_preserves_result_metadata_for_response_boundary(self):
         fake_result = (
             3,
             0,
@@ -533,12 +533,12 @@ class TestPresentationBuilder(unittest.TestCase):
                 xlsx_path=self.repo_root / "testing.xlsx",
             )
 
-        self.assertIn("&lt;script&gt;", result.chart_failures[0].label)
-        self.assertIn("&lt;img", result.chart_failures[0].output_files[0])
-        self.assertIn("&lt;b&gt;", result.text_field_failures[0].sheet)
-        self.assertIn("&lt;script&gt;", result.text_field_failures[0].error)
-        self.assertIn("&lt;script&gt;", result.applied_text_keys[0])
-        self.assertNotIn("<script>", result.applied_text_keys[0])
+        self.assertEqual(result.chart_failures, chart_failures)
+        self.assertEqual(result.text_field_failures, text_failures)
+        self.assertEqual(
+            result.applied_text_keys,
+            ('slide1_title"><script>alert(1)</script>',),
+        )
 
     def test_resolve_path_supports_relative_and_absolute_inputs(self):
         relative = resolve_path(self.repo_root, "config/job_config.json")

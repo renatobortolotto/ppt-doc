@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import re
-from html import escape, unescape
+from html import escape
 from pathlib import Path
 from typing import Any, Dict, Mapping
 from urllib.parse import quote
@@ -31,7 +31,7 @@ MAX_ATTACHMENT_FILENAME_LENGTH = 180
 
 
 def sanitize_response_text(value: Any) -> str:
-    return escape(unescape(str(value)), quote=True)
+    return escape(str(value), quote=True)
 
 
 def sanitize_response_optional_text(value: Any) -> str | None:

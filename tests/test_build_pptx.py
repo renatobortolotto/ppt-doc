@@ -1,3 +1,4 @@
+import json
 import types
 import unittest
 from pathlib import Path
@@ -140,6 +141,56 @@ class TestBuildPptxApplication(unittest.TestCase):
         self.assertEqual(body["filename"], "api-output.pptx")
         self.assertEqual(body["summary"]["generatedChartCount"], 4)
         self.assertTrue(body["pptxBase64"])
+
+    def test_compose_presentation_from_inputs_escapes_malicious_response_metadata(self):
+        payloads = (
+            "<script>alert(1)</script>",
+            '"><img src=x onerror=alert(1)>',
+            "' onmouseover='alert(1)",
+            "</script><script>alert(1)</script>",
+        )
+        fake_result = types.SimpleNamespace(
+            output_path=payloads[0],
+            replaced_pictures=1,
+            replaced_placeholders=2,
+            replaced_text=3,
+            generated_chart_count=4,
+            chart_failures=(
+                types.SimpleNamespace(
+                    generator_key=payloads[1],
+                    label=payloads[0],
+                    output_files=(payloads[2],),
+                    error=payloads[3],
+                ),
+            ),
+            text_field_failures=(
+                types.SimpleNamespace(
+                    field_id=payloads[1],
+                    sheet=payloads[2],
+                    a1_range=payloads[3],
+                    error=payloads[0],
+                ),
+            ),
+            applied_text_keys=payloads,
+        )
+
+        with patch.object(
+            build_pptx,
+            "_build_presentation_artifact",
+            return_value=(b"pptx-bytes", payloads[1], fake_result),
+        ):
+            body = build_pptx.compose_presentation_from_inputs(
+                b"xlsx-bytes",
+                b'{"response":{}}',
+            )
+
+        rendered_body = json.dumps(body, ensure_ascii=False)
+        for payload in payloads:
+            self.assertNotIn(payload, rendered_body)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", rendered_body)
+        self.assertIn("&quot;&gt;&lt;img src=x onerror=alert(1)&gt;", rendered_body)
+        self.assertIn("&#x27; onmouseover=&#x27;alert(1)", rendered_body)
+        self.assertIn("&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;", rendered_body)
 
     def test_compose_presentation_download_response_returns_binary_file_response(self):
         fake_result = self._fake_build_result("download.pptx")

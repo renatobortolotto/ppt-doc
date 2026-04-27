@@ -5,7 +5,6 @@ import logging
 import re
 import shutil
 from dataclasses import dataclass
-from html import escape, unescape
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Callable, Dict, Mapping, Sequence
@@ -78,37 +77,6 @@ class BuildPresentationResult:
     chart_failures: tuple[ChartGenerationFailure, ...]
     text_field_failures: tuple[TextFieldFailure, ...]
     applied_text_keys: tuple[str, ...]
-
-
-def _escape_html_response_text(value: object) -> str:
-    return escape(unescape(str(value)), quote=True)
-
-
-def _escape_optional_html_response_text(value: object | None) -> str | None:
-    if value is None:
-        return None
-    return _escape_html_response_text(value)
-
-
-def _escape_chart_failure(failure: ChartGenerationFailure) -> ChartGenerationFailure:
-    return ChartGenerationFailure(
-        generator_key=_escape_html_response_text(failure.generator_key),
-        label=_escape_html_response_text(failure.label),
-        output_files=tuple(
-            _escape_html_response_text(output_file)
-            for output_file in failure.output_files
-        ),
-        error=_escape_html_response_text(failure.error),
-    )
-
-
-def _escape_text_field_failure(failure: TextFieldFailure) -> TextFieldFailure:
-    return TextFieldFailure(
-        field_id=_escape_html_response_text(failure.field_id),
-        sheet=_escape_optional_html_response_text(failure.sheet),
-        a1_range=_escape_html_response_text(failure.a1_range),
-        error=_escape_html_response_text(failure.error),
-    )
 
 
 def resolve_path(repo_root: Path, path_value: str) -> Path:
@@ -632,18 +600,9 @@ def build_presentation(
         replaced_placeholders=replaced_placeholders,
         replaced_text=replaced_text,
         generated_chart_count=generated_chart_count,
-        chart_failures=tuple(
-            _escape_chart_failure(failure)
-            for failure in chart_failures
-        ),
-        text_field_failures=tuple(
-            _escape_text_field_failure(failure)
-            for failure in text_field_failures
-        ),
-        applied_text_keys=tuple(
-            _escape_html_response_text(key)
-            for key in applied_text_keys
-        ),
+        chart_failures=chart_failures,
+        text_field_failures=text_field_failures,
+        applied_text_keys=tuple(applied_text_keys),
     )
 
 
@@ -689,17 +648,8 @@ def build_presentation_from_bytes(
             replaced_placeholders=result.replaced_placeholders,
             replaced_text=result.replaced_text,
             generated_chart_count=result.generated_chart_count,
-            chart_failures=tuple(
-                _escape_chart_failure(failure)
-                for failure in result.chart_failures
-            ),
-            text_field_failures=tuple(
-                _escape_text_field_failure(failure)
-                for failure in result.text_field_failures
-            ),
-            applied_text_keys=tuple(
-                _escape_html_response_text(key)
-                for key in result.applied_text_keys
-            ),
+            chart_failures=result.chart_failures,
+            text_field_failures=result.text_field_failures,
+            applied_text_keys=result.applied_text_keys,
         )
         return output_path.read_bytes(), logical_result

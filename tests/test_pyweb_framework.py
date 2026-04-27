@@ -84,7 +84,11 @@ class TestPyWebFramework(unittest.TestCase):
             response = handle_build_pptx_request(request_obj)
 
         self.assertEqual(response, "download-response")
-        compose_mock.assert_called_once_with(b"xlsx-bytes", b'{"response":{}}')
+        compose_mock.assert_called_once_with(
+            b"xlsx-bytes",
+            b'{"response":{}}',
+            xlsx_filename=None,
+        )
 
     def test_handle_build_pptx_request_accepts_json_base64_payload(self):
         request_obj = _FakeRequest(
@@ -101,11 +105,15 @@ class TestPyWebFramework(unittest.TestCase):
             response = handle_build_pptx_request(request_obj)
 
         self.assertEqual(response, "download-response")
-        compose_mock.assert_called_once_with(b"xlsx-bytes", b'{"response":{}}')
+        compose_mock.assert_called_once_with(
+            b"xlsx-bytes",
+            b'{"response":{}}',
+            xlsx_filename=None,
+        )
 
     def test_compose_presentation_from_inputs_serializes_success_response(self):
         fake_build = types.SimpleNamespace(
-            output_path=Path("saida.pptx"),
+            output_path=Path("main_testing.pptx"),
             replaced_pictures=1,
             replaced_placeholders=0,
             replaced_text=2,
@@ -134,7 +142,7 @@ class TestPyWebFramework(unittest.TestCase):
 
     def test_compose_presentation_download_response_returns_binary_attachment(self):
         fake_build = types.SimpleNamespace(
-            output_path=Path("saida.pptx"),
+            output_path=Path("main_testing.pptx"),
             replaced_pictures=1,
             replaced_placeholders=0,
             replaced_text=2,

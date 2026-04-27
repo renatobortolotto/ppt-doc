@@ -1,8 +1,9 @@
+import html
+import tempfile
 import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-import tempfile
 
 from src.utils.xlsx_text_fields import TextFieldSpec
 
@@ -475,29 +476,36 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertEqual(result.generated_chart_count, 1)
         self.assertEqual(result.text_field_failures, text_failures)
 
-    def test_build_presentation_preserves_result_metadata_for_response_boundary(self):
+    def test_build_presentation_escapes_result_metadata_before_return(self):
+        payloads = (
+            "<script>alert(1)</script>",
+            '"><img src=x onerror=alert(1)>',
+            "' onmouseover='alert(1)",
+            "</script><script>alert(1)</script>",
+            "<svg/onload=alert(1)>",
+        )
         fake_result = (
             3,
             0,
             2,
             [],
             [],
-            ['slide1_title"><script>alert(1)</script>'],
+            payloads,
         )
         chart_failures = (
             ChartGenerationFailure(
-                generator_key='slide4"><script>',
-                label='slide 4 <script>alert("x")</script>',
-                output_files=('<img src=x onerror=alert(1)>.png',),
-                error='Valor <script>alert(1)</script>',
+                generator_key=payloads[1],
+                label=payloads[0],
+                output_files=(payloads[2],),
+                error=payloads[3],
             ),
         )
         text_failures = (
             TextFieldFailure(
-                field_id='ROE"><script>',
-                sheet="DRE <b>Saida</b>",
-                a1_range='K20"><script>',
-                error="Aba <script>alert(1)</script>",
+                field_id=payloads[1],
+                sheet=payloads[2],
+                a1_range=payloads[3],
+                error=payloads[4],
             ),
         )
 
@@ -533,12 +541,25 @@ class TestPresentationBuilder(unittest.TestCase):
                 xlsx_path=self.repo_root / "testing.xlsx",
             )
 
-        self.assertEqual(result.chart_failures, chart_failures)
-        self.assertEqual(result.text_field_failures, text_failures)
-        self.assertEqual(
-            result.applied_text_keys,
-            ('slide1_title"><script>alert(1)</script>',),
+        rendered = " ".join(
+            (
+                result.chart_failures[0].generator_key,
+                result.chart_failures[0].label,
+                result.chart_failures[0].output_files[0],
+                result.chart_failures[0].error,
+                result.text_field_failures[0].field_id,
+                result.text_field_failures[0].sheet or "",
+                result.text_field_failures[0].a1_range,
+                result.text_field_failures[0].error,
+                " ".join(result.applied_text_keys),
+            )
         )
+        for payload in payloads:
+            self.assertNotIn(payload, rendered)
+            self.assertIn(html.escape(str(payload), quote=True), rendered)
+        self.assertNotIn("<script>", rendered)
+        self.assertNotIn("<img", rendered)
+        self.assertNotIn("<svg", rendered)
 
     def test_resolve_path_supports_relative_and_absolute_inputs(self):
         relative = resolve_path(self.repo_root, "config/job_config.json")

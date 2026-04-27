@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import logging
 import re
@@ -600,9 +601,35 @@ def build_presentation(
         replaced_placeholders=replaced_placeholders,
         replaced_text=replaced_text,
         generated_chart_count=generated_chart_count,
-        chart_failures=chart_failures,
-        text_field_failures=text_field_failures,
-        applied_text_keys=tuple(applied_text_keys),
+        chart_failures=tuple(
+            ChartGenerationFailure(
+                generator_key=html.escape(str(failure.generator_key), quote=True),
+                label=html.escape(str(failure.label), quote=True),
+                output_files=tuple(
+                    html.escape(str(output_file), quote=True)
+                    for output_file in failure.output_files
+                ),
+                error=html.escape(str(failure.error), quote=True),
+            )
+            for failure in chart_failures
+        ),
+        text_field_failures=tuple(
+            TextFieldFailure(
+                field_id=html.escape(str(failure.field_id), quote=True),
+                sheet=(
+                    None
+                    if failure.sheet is None
+                    else html.escape(str(failure.sheet), quote=True)
+                ),
+                a1_range=html.escape(str(failure.a1_range), quote=True),
+                error=html.escape(str(failure.error), quote=True),
+            )
+            for failure in text_field_failures
+        ),
+        applied_text_keys=tuple(
+            html.escape(str(key), quote=True)
+            for key in applied_text_keys
+        ),
     )
 
 
@@ -648,8 +675,34 @@ def build_presentation_from_bytes(
             replaced_placeholders=result.replaced_placeholders,
             replaced_text=result.replaced_text,
             generated_chart_count=result.generated_chart_count,
-            chart_failures=result.chart_failures,
-            text_field_failures=result.text_field_failures,
-            applied_text_keys=result.applied_text_keys,
+            chart_failures=tuple(
+                ChartGenerationFailure(
+                    generator_key=html.escape(str(failure.generator_key), quote=True),
+                    label=html.escape(str(failure.label), quote=True),
+                    output_files=tuple(
+                        html.escape(str(output_file), quote=True)
+                        for output_file in failure.output_files
+                    ),
+                    error=html.escape(str(failure.error), quote=True),
+                )
+                for failure in result.chart_failures
+            ),
+            text_field_failures=tuple(
+                TextFieldFailure(
+                    field_id=html.escape(str(failure.field_id), quote=True),
+                    sheet=(
+                        None
+                        if failure.sheet is None
+                        else html.escape(str(failure.sheet), quote=True)
+                    ),
+                    a1_range=html.escape(str(failure.a1_range), quote=True),
+                    error=html.escape(str(failure.error), quote=True),
+                )
+                for failure in result.text_field_failures
+            ),
+            applied_text_keys=tuple(
+                html.escape(str(key), quote=True)
+                for key in result.applied_text_keys
+            ),
         )
         return output_path.read_bytes(), logical_result

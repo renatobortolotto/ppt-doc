@@ -148,6 +148,7 @@ class TestBuildPptxApplication(unittest.TestCase):
             '"><img src=x onerror=alert(1)>',
             "' onmouseover='alert(1)",
             "</script><script>alert(1)</script>",
+            "<svg/onload=alert(1)>",
         )
         fake_result = types.SimpleNamespace(
             output_path=payloads[0],
@@ -168,7 +169,7 @@ class TestBuildPptxApplication(unittest.TestCase):
                     field_id=payloads[1],
                     sheet=payloads[2],
                     a1_range=payloads[3],
-                    error=payloads[0],
+                    error=payloads[4],
                 ),
             ),
             applied_text_keys=payloads,
@@ -191,6 +192,7 @@ class TestBuildPptxApplication(unittest.TestCase):
         self.assertIn("&quot;&gt;&lt;img src=x onerror=alert(1)&gt;", rendered_body)
         self.assertIn("&#x27; onmouseover=&#x27;alert(1)", rendered_body)
         self.assertIn("&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;", rendered_body)
+        self.assertIn("&lt;svg/onload=alert(1)&gt;", rendered_body)
 
     def test_compose_presentation_download_response_returns_binary_file_response(self):
         fake_result = self._fake_build_result("download.pptx")

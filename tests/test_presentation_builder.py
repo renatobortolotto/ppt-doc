@@ -569,6 +569,27 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertEqual(relative, (self.repo_root / "config" / "job_config.json").resolve())
         self.assertEqual(absolute, absolute_input)
 
+    def test_resolve_path_escapes_html_sensitive_input(self):
+        payloads = (
+            "<script>alert(1)</script>",
+            "\"><img src=x onerror=alert(1)>",
+            "' onmouseover='alert(1)",
+            "</script><script>alert(1)</script>",
+            "<svg/onload=alert(1)>",
+        )
+
+        for payload in payloads:
+            raw_path = f"reports/{payload}.pptx"
+            resolved = resolve_path(self.repo_root, raw_path)
+            rendered_path = str(resolved)
+
+            self.assertNotIn(raw_path, rendered_path)
+            self.assertIn(html.escape(raw_path, quote=True), rendered_path)
+            self.assertNotIn("<", rendered_path)
+            self.assertNotIn(">", rendered_path)
+            self.assertNotIn('"', rendered_path)
+            self.assertNotIn("'", rendered_path)
+
     def test_load_job_config_rejects_non_object_json(self):
         with tempfile.TemporaryDirectory() as td:
             repo_root = Path(td)

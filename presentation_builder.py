@@ -81,10 +81,12 @@ class BuildPresentationResult:
 
 
 def resolve_path(repo_root: Path, path_value: str) -> Path:
-    path = Path(path_value).expanduser()
+    path = Path(str(path_value)).expanduser()
     if path.is_absolute():
-        return path
-    return (repo_root / path).resolve()
+        resolved_path = path
+    else:
+        resolved_path = (repo_root / path).resolve()
+    return Path(html.escape(str(resolved_path), quote=True))
 
 
 def extract_period_token(filename: str | Path | None) -> str | None:

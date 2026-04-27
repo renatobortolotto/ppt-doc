@@ -42,6 +42,7 @@ from src.utils.xlsx_text_fields import (
 ChartGeneratorFn = Callable[..., list[Path]]
 PERIOD_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([1-4]T[0-9]{2})(?![A-Za-z0-9])", re.IGNORECASE)
 OUTPUT_FILENAME_UNSAFE_CHARS_RE = re.compile(r"""[\x00-\x1f\x7f<>:"/\\|?*&'`;]""")
+CONFIG_PATH_ALLOWED_CHARS_RE = re.compile(r"^[A-Za-z0-9._/ -]+$")
 DEFAULT_OUTPUT_FILENAME = "presentation.updated.pptx"
 MAX_OUTPUT_FILENAME_LENGTH = 180
 
@@ -81,12 +82,25 @@ class BuildPresentationResult:
 
 
 def resolve_path(repo_root: Path, path_value: str) -> Path:
-    path = Path(str(path_value)).expanduser()
-    if path.is_absolute():
-        resolved_path = path
-    else:
-        resolved_path = (repo_root / path).resolve()
-    return Path(html.escape(str(resolved_path), quote=True))
+    safe_path_value = str(path_value).strip()
+    if not safe_path_value:
+        raise ValueError("Caminho configurado invalido")
+    if safe_path_value.startswith(("/", "~")):
+        raise ValueError("Caminho configurado deve ser relativo ao projeto")
+    if not CONFIG_PATH_ALLOWED_CHARS_RE.fullmatch(safe_path_value):
+        raise ValueError("Caminho configurado contem caracteres invalidos")
+    if safe_path_value != ".":
+        parts = safe_path_value.split("/")
+        if any(part in ("", ".", "..") for part in parts):
+            raise ValueError("Caminho configurado contem segmento invalido")
+
+    safe_repo_root = repo_root.expanduser().resolve()
+    resolved_path = (safe_repo_root / safe_path_value).resolve()
+    try:
+        resolved_path.relative_to(safe_repo_root)
+    except ValueError as exc:
+        raise ValueError("Caminho configurado deve ficar dentro do projeto") from exc
+    return resolved_path
 
 
 def extract_period_token(filename: str | Path | None) -> str | None:

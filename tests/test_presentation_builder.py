@@ -561,15 +561,15 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertNotIn("<img", rendered)
         self.assertNotIn("<svg", rendered)
 
-    def test_resolve_path_supports_relative_and_absolute_inputs(self):
+    def test_resolve_path_supports_relative_and_rejects_absolute_inputs(self):
         relative = resolve_path(self.repo_root, "config/job_config.json")
         absolute_input = Path("/tmp/ppt-doc-absolute.json")
-        absolute = resolve_path(self.repo_root, str(absolute_input))
 
         self.assertEqual(relative, (self.repo_root / "config" / "job_config.json").resolve())
-        self.assertEqual(absolute, absolute_input)
+        with self.assertRaisesRegex(ValueError, "relativo ao projeto"):
+            resolve_path(self.repo_root, str(absolute_input))
 
-    def test_resolve_path_escapes_html_sensitive_input(self):
+    def test_resolve_path_rejects_html_sensitive_input(self):
         payloads = (
             "<script>alert(1)</script>",
             "\"><img src=x onerror=alert(1)>",
@@ -580,15 +580,21 @@ class TestPresentationBuilder(unittest.TestCase):
 
         for payload in payloads:
             raw_path = f"reports/{payload}.pptx"
-            resolved = resolve_path(self.repo_root, raw_path)
-            rendered_path = str(resolved)
+            with self.assertRaisesRegex(ValueError, "caracteres invalidos"):
+                resolve_path(self.repo_root, raw_path)
 
-            self.assertNotIn(raw_path, rendered_path)
-            self.assertIn(html.escape(raw_path, quote=True), rendered_path)
-            self.assertNotIn("<", rendered_path)
-            self.assertNotIn(">", rendered_path)
-            self.assertNotIn('"', rendered_path)
-            self.assertNotIn("'", rendered_path)
+    def test_resolve_path_rejects_path_traversal(self):
+        unsafe_paths = (
+            "../secret.json",
+            "config/../../secret.json",
+            "config//text_fields.json",
+            "config/./text_fields.json",
+            "~/secret.json",
+        )
+
+        for raw_path in unsafe_paths:
+            with self.assertRaisesRegex(ValueError, "Caminho configurado"):
+                resolve_path(self.repo_root, raw_path)
 
     def test_load_job_config_rejects_non_object_json(self):
         with tempfile.TemporaryDirectory() as td:

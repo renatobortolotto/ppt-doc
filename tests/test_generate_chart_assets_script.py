@@ -12,7 +12,7 @@ from scripts import generate_chart_assets as generate_chart_assets_script
 
 
 class TestGenerateChartAssetsScript(unittest.TestCase):
-    def test_main_uses_config_images_dir_and_prints_summary(self):
+    def test_main_uses_project_root_output_dir_and_prints_summary(self):
         with tempfile.TemporaryDirectory() as td:
             td_path = Path(td)
             xlsx_path = td_path / "input.xlsx"
@@ -29,7 +29,7 @@ class TestGenerateChartAssetsScript(unittest.TestCase):
                 patch.object(
                     generate_chart_assets_script,
                     "_load_job_config",
-                    return_value={"images_dir": "corporate/images"},
+                    return_value={"images_dir": "../ignored"},
                 ),
                 patch.object(generate_chart_assets_script, "_configure_logging"),
                 patch.object(
@@ -47,7 +47,7 @@ class TestGenerateChartAssetsScript(unittest.TestCase):
             self.assertEqual(generate_mock.call_args.kwargs["xlsx_path"], xlsx_path.resolve())
             self.assertEqual(
                 generate_mock.call_args.kwargs["images_dir"],
-                (generate_chart_assets_script.REPO_ROOT / "corporate/images").resolve(),
+                generate_chart_assets_script.REPO_ROOT.resolve(),
             )
             self.assertIsNone(generate_mock.call_args.kwargs["only_slides"])
 

@@ -89,7 +89,7 @@ class TestBuildPptxApplication(unittest.TestCase):
             build_pptx._parse_llm_payload(b"{")
 
     def test_build_presentation_artifact_loads_config_and_passes_inputs(self):
-        fake_result = self._fake_build_result("relatorio.pptx")
+        fake_result = self._fake_build_result("presentation.updated.pptx")
 
         with (
             patch.object(build_pptx, "_repo_root", return_value=Path("/repo")) as root_mock,
@@ -120,7 +120,7 @@ class TestBuildPptxApplication(unittest.TestCase):
             llm_payload={"response": {"title": "ok"}},
         )
         self.assertEqual(pptx_bytes, b"pptx-bytes")
-        self.assertEqual(filename, "relatorio.pptx")
+        self.assertEqual(filename, "presentation.updated.pptx")
         self.assertIs(result, fake_result)
 
     def test_compose_presentation_from_inputs_serializes_build_result(self):

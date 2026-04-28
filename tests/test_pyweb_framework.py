@@ -136,7 +136,7 @@ class TestPyWebFramework(unittest.TestCase):
                     b'{"response":{}}',
                 )
 
-        self.assertEqual(body["filename"], "main_testing.pptx")
+        self.assertEqual(body["filename"], "presentation.updated.pptx")
         self.assertEqual(body["summary"]["generatedChartCount"], 3)
         self.assertTrue(body["pptxBase64"])
 
@@ -168,7 +168,7 @@ class TestPyWebFramework(unittest.TestCase):
         self.assertEqual(getattr(response, "status_code", None), 200)
         self.assertEqual(response.headers.get("Content-Type"), PPTX_CONTENT_TYPE)
         self.assertIn("attachment;", response.headers.get("Content-Disposition", ""))
-        self.assertIn("main_testing.pptx", response.headers.get("Content-Disposition", ""))
+        self.assertIn("presentation.updated.pptx", response.headers.get("Content-Disposition", ""))
         self.assertEqual(response.get_data(), b"pptx-bytes")
 
     def test_build_file_response_neutralizes_html_sensitive_filename(self):

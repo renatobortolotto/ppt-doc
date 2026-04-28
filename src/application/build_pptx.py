@@ -7,7 +7,12 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Mapping, Tuple
 
-from presentation_builder import build_presentation_from_bytes, load_job_config, output_filename_for_xlsx
+from presentation_builder import (
+    DEFAULT_OUTPUT_FILENAME,
+    build_presentation_from_bytes,
+    load_job_config,
+    output_filename_for_xlsx,
+)
 from src.application.response_safety import (
     build_error_response,
     build_file_response,
@@ -49,12 +54,9 @@ def _build_presentation_artifact(
         xlsx_filename=xlsx_filename,
         llm_payload=llm_payload,
     )
-    fallback_filename = str(
-        cfg.get("api_output_filename") or cfg.get("pptx_output") or "presentation.updated.pptx"
-    )
     filename = output_filename_for_xlsx(
         xlsx_filename,
-        fallback_filename=fallback_filename,
+        fallback_filename=DEFAULT_OUTPUT_FILENAME,
     )
     return pptx_bytes, filename, result
 
@@ -123,7 +125,7 @@ def _upload_filename(upload: Any) -> str | None:
     for attr_name in ("filename", "file_name", "original_filename", "name"):
         value = getattr(upload, attr_name, None)
         if value:
-            return Path(str(value)).name
+            return str(value).replace("\\", "/").rsplit("/", 1)[-1]
     return None
 
 
@@ -224,7 +226,12 @@ def _extract_request_payload(request_obj: Any) -> tuple[bytes, bytes, str | None
             raise ValueError(
                 "No corpo JSON, envie xlsxBase64 + llmResponseBase64 ou xlsxBase64 + llmResponse"
             )
-        return xlsx_bytes, llm_bytes, Path(str(xlsx_filename)).name if xlsx_filename else None
+        safe_xlsx_filename = (
+            str(xlsx_filename).replace("\\", "/").rsplit("/", 1)[-1]
+            if xlsx_filename
+            else None
+        )
+        return xlsx_bytes, llm_bytes, safe_xlsx_filename
 
     raise ValueError(
         "Requisicao sem payload suportado. Use multipart/form-data com xlsx_file + llm_response_file "

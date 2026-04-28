@@ -42,8 +42,10 @@ from src.utils.xlsx_text_fields import (
 ChartGeneratorFn = Callable[..., list[Path]]
 PERIOD_TOKEN_RE = re.compile(r"(?<![A-Za-z0-9])([1-4]T[0-9]{2})(?![A-Za-z0-9])", re.IGNORECASE)
 OUTPUT_FILENAME_UNSAFE_CHARS_RE = re.compile(r"""[\x00-\x1f\x7f<>:"/\\|?*&'`;]""")
-CONFIG_PATH_ALLOWED_CHARS_RE = re.compile(r"^[A-Za-z0-9._/ -]+$")
 DEFAULT_OUTPUT_FILENAME = "presentation.updated.pptx"
+DEFAULT_PPTX_TEMPLATE = "teste-design.gerado.updated.pptx"
+DEFAULT_TEXT_FIELDS_CONFIG = ("config", "text_fields.json")
+DEFAULT_LLM_RESPONSE_JSON = "llm_response.latest.json"
 MAX_OUTPUT_FILENAME_LENGTH = 180
 
 
@@ -81,39 +83,32 @@ class BuildPresentationResult:
     applied_text_keys: tuple[str, ...]
 
 
-def resolve_path(repo_root: Path, path_value: str) -> str:
-    return html.escape(str(_resolve_project_path(repo_root, path_value)), quote=True)
+def _project_root(repo_root: Path) -> Path:
+    return repo_root.expanduser().resolve()
 
 
-def _resolve_project_path(repo_root: Path, path_value: str) -> Path:
-    raw_path_value = str(path_value).strip()
-    safe_path_value = html.escape(raw_path_value, quote=True)
-    if safe_path_value != raw_path_value:
-        raise ValueError("Caminho configurado contem caracteres invalidos")
-    if not safe_path_value:
-        raise ValueError("Caminho configurado invalido")
-    if safe_path_value.startswith(("/", "~")):
-        raise ValueError("Caminho configurado deve ser relativo ao projeto")
-    if not CONFIG_PATH_ALLOWED_CHARS_RE.fullmatch(safe_path_value):
-        raise ValueError("Caminho configurado contem caracteres invalidos")
-    if safe_path_value != ".":
-        parts = safe_path_value.split("/")
-        if any(part in ("", ".", "..") for part in parts):
-            raise ValueError("Caminho configurado contem segmento invalido")
+def _pptx_template_path(repo_root: Path) -> Path:
+    return _project_root(repo_root) / DEFAULT_PPTX_TEMPLATE
 
-    safe_repo_root = repo_root.expanduser().resolve()
-    resolved_path = (safe_repo_root / safe_path_value).resolve()
-    try:
-        resolved_path.relative_to(safe_repo_root)
-    except ValueError as exc:
-        raise ValueError("Caminho configurado deve ficar dentro do projeto") from exc
-    return (safe_repo_root / html.escape(str(resolved_path.relative_to(safe_repo_root)), quote=True)).resolve()
+
+def _text_fields_config_path(repo_root: Path) -> Path:
+    return _project_root(repo_root).joinpath(*DEFAULT_TEXT_FIELDS_CONFIG)
+
+
+def _llm_response_json_path(repo_root: Path) -> Path:
+    return _project_root(repo_root) / DEFAULT_LLM_RESPONSE_JSON
+
+
+def _default_images_dir(repo_root: Path) -> Path:
+    return _project_root(repo_root)
 
 
 def extract_period_token(filename: str | Path | None) -> str | None:
     if filename is None:
         return None
-    match = PERIOD_TOKEN_RE.search(Path(str(filename)).stem)
+    filename_text = str(filename).replace("\\", "/").rsplit("/", 1)[-1]
+    filename_stem = filename_text.rsplit(".", 1)[0]
+    match = PERIOD_TOKEN_RE.search(filename_stem)
     if not match:
         return None
     return match.group(1).upper()
@@ -124,22 +119,26 @@ def _safe_output_filename(
     *,
     default_filename: str = DEFAULT_OUTPUT_FILENAME,
 ) -> str:
-    raw_name = Path(str(filename or "")).name
+    raw_name = str(filename or "").replace("\\", "/").rsplit("/", 1)[-1]
     safe_name = OUTPUT_FILENAME_UNSAFE_CHARS_RE.sub("_", raw_name)
     safe_name = re.sub(r"\s+", " ", safe_name).strip(" ._")
 
     if not safe_name:
         safe_name = default_filename
 
-    if Path(safe_name).suffix.lower() != ".pptx":
-        stem = safe_name.rstrip(".") or Path(default_filename).stem
+    suffix = f".{safe_name.rsplit('.', 1)[-1]}" if "." in safe_name else ""
+    if suffix.lower() != ".pptx":
+        stem = safe_name.rsplit(".", 1)[0].rstrip(".") if "." in safe_name else safe_name.rstrip(".")
+        default_stem = default_filename.rsplit(".", 1)[0] if "." in default_filename else default_filename
+        stem = stem or default_stem
         safe_name = f"{stem}.pptx"
 
     if len(safe_name) > MAX_OUTPUT_FILENAME_LENGTH:
-        suffix = Path(safe_name).suffix or ".pptx"
+        suffix = f".{safe_name.rsplit('.', 1)[-1]}" if "." in safe_name else ".pptx"
         stem_limit = MAX_OUTPUT_FILENAME_LENGTH - len(suffix)
-        stem = Path(safe_name).stem[:stem_limit].rstrip(" ._")
-        safe_name = f"{stem or Path(default_filename).stem}{suffix}"
+        stem = safe_name.rsplit(".", 1)[0][:stem_limit].rstrip(" ._")
+        default_stem = default_filename.rsplit(".", 1)[0] if "." in default_filename else default_filename
+        safe_name = f"{stem or default_stem}{suffix}"
 
     return safe_name
 
@@ -168,11 +167,7 @@ def load_job_config(repo_root: Path) -> Dict[str, Any]:
 
 
 def load_llm_payload_from_path(repo_root: Path, cfg: Mapping[str, Any]) -> object | None:
-    llm_path = cfg.get("llm_response_json")
-    if not llm_path:
-        return None
-
-    path = _resolve_project_path(repo_root, str(llm_path))
+    path = _llm_response_json_path(repo_root)
     if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
@@ -206,10 +201,7 @@ def _load_text_fields_config(
     repo_root: Path,
     cfg: Mapping[str, Any],
 ) -> tuple[Path, str | None, Sequence[object]]:
-    text_fields_config = _resolve_project_path(
-        repo_root,
-        str(cfg.get("text_fields_config", "config/text_fields.json")),
-    )
+    text_fields_config = _text_fields_config_path(repo_root)
     default_sheet, specs = parse_text_fields_json(text_fields_config)
     return text_fields_config, default_sheet, specs
 
@@ -549,16 +541,16 @@ def build_presentation(
     if normalized_only_slides and skip_charts:
         raise ValueError("only_slides nao pode ser usado junto com skip_charts")
 
-    configured_output_path = _resolve_project_path(repo_root, str(cfg.get("pptx_output") or "presentation.updated.pptx"))
+    configured_output_path = _project_root(repo_root) / DEFAULT_OUTPUT_FILENAME
     effective_output_path = output_path or configured_output_path.with_name(
         output_filename_for_xlsx(
             xlsx_path.name,
             fallback_filename=configured_output_path.name,
         )
     )
-    effective_images_dir = images_dir or _resolve_project_path(repo_root, str(cfg.get("images_dir", ".")))
+    effective_images_dir = images_dir or _default_images_dir(repo_root)
 
-    pptx_template = _resolve_project_path(repo_root, str(cfg.get("pptx_template")))
+    pptx_template = _pptx_template_path(repo_root)
     allow_placeholder_text = bool(cfg.get("allow_placeholder_text", False))
     effective_llm_payload = llm_payload if llm_payload is not None else load_llm_payload_from_path(repo_root, cfg)
     _text_fields_config_path, _default_sheet, text_specs = _load_text_fields_config(
@@ -674,14 +666,11 @@ def build_presentation_from_bytes(
         xlsx_path.write_bytes(xlsx_bytes)
 
         images_dir = tmp_root / "images"
-        fallback_output_filename = str(
-            cfg.get("api_output_filename") or cfg.get("pptx_output") or "presentation.updated.pptx"
-        )
         output_filename = output_filename_for_xlsx(
             xlsx_filename,
-            fallback_filename=fallback_output_filename,
+            fallback_filename=DEFAULT_OUTPUT_FILENAME,
         )
-        output_path = tmp_root / Path(output_filename).name
+        output_path = tmp_root / output_filename
 
         result = build_presentation(
             repo_root=repo_root,
@@ -693,7 +682,7 @@ def build_presentation_from_bytes(
             skip_charts=skip_charts,
         )
         logical_result = BuildPresentationResult(
-            output_path=Path(Path(output_filename).name),
+            output_path=Path(output_filename),
             replaced_pictures=result.replaced_pictures,
             replaced_placeholders=result.replaced_placeholders,
             replaced_text=result.replaced_text,

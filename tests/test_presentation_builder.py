@@ -23,8 +23,6 @@ from presentation_builder import (
     load_job_config,
     load_llm_mapping_from_payload,
     output_filename_for_xlsx,
-    resolve_path,
-    _resolve_project_path,
     _chart_generators,
     _persist_generated_chart_files,
     _select_chart_generators,
@@ -562,42 +560,61 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertNotIn("<img", rendered)
         self.assertNotIn("<svg", rendered)
 
-    def test_resolve_path_supports_relative_and_rejects_absolute_inputs(self):
-        relative = _resolve_project_path(self.repo_root, "config/job_config.json")
-        rendered_relative = resolve_path(self.repo_root, "config/job_config.json")
-        absolute_input = Path("/tmp/ppt-doc-absolute.json")
-
-        self.assertEqual(relative, (self.repo_root / "config" / "job_config.json").resolve())
-        self.assertEqual(rendered_relative, html.escape(str(relative), quote=True))
-        with self.assertRaisesRegex(ValueError, "relativo ao projeto"):
-            _resolve_project_path(self.repo_root, str(absolute_input))
-
-    def test_resolve_path_rejects_html_sensitive_input(self):
-        payloads = (
-            "<script>alert(1)</script>",
-            "\"><img src=x onerror=alert(1)>",
-            "' onmouseover='alert(1)",
-            "</script><script>alert(1)</script>",
-            "<svg/onload=alert(1)>",
+    def test_build_presentation_uses_internal_paths_instead_of_configured_paths(self):
+        cfg = dict(self.cfg)
+        cfg.update(
+            {
+                "pptx_template": "../evil/template.pptx",
+                "pptx_output": "../evil/output.pptx",
+                "images_dir": "../evil/images",
+                "text_fields_config": "../evil/text_fields.json",
+                "llm_response_json": "../evil/llm.json",
+            }
         )
+        fake_result = (3, 0, 2, [], [], ["slide1_title"])
+        captured: dict[str, Path] = {}
 
-        for payload in payloads:
-            raw_path = f"reports/{payload}.pptx"
-            with self.assertRaisesRegex(ValueError, "caracteres invalidos"):
-                _resolve_project_path(self.repo_root, raw_path)
+        def _fake_generate_chart_assets(*, xlsx_path: Path, images_dir: Path, only_slides=None):
+            captured["generate_images_dir"] = images_dir
+            return ChartGenerationResult(generated_files=(), failures=())
 
-    def test_resolve_path_rejects_path_traversal(self):
-        unsafe_paths = (
-            "../secret.json",
-            "config/../../secret.json",
-            "config//text_fields.json",
-            "config/./text_fields.json",
-            "~/secret.json",
-        )
+        def _fake_update_presentation(*, pptx_path, output_path, images_dir, allow_placeholder_text, text_json, xlsx_path, text_payload, pp_field_ids):
+            captured["pptx_path"] = pptx_path
+            captured["output_path"] = output_path
+            captured["update_images_dir"] = images_dir
+            return fake_result
 
-        for raw_path in unsafe_paths:
-            with self.assertRaisesRegex(ValueError, "Caminho configurado"):
-                _resolve_project_path(self.repo_root, raw_path)
+        with (
+            patch("presentation_builder._load_validated_workbook") as load_workbook_mock,
+            patch(
+                "presentation_builder.generate_chart_assets",
+                side_effect=_fake_generate_chart_assets,
+            ),
+            patch(
+                "presentation_builder.build_text_mapping_with_failures",
+                return_value=TextFieldExtractionResult(
+                    mapping={"slide1_title": "Titulo"},
+                    failures=(),
+                ),
+            ),
+            patch(
+                "presentation_builder.update_presentation",
+                side_effect=_fake_update_presentation,
+            ),
+        ):
+            load_workbook_mock.return_value = types.SimpleNamespace(close=lambda: None)
+            result = build_presentation(
+                repo_root=self.repo_root,
+                cfg=cfg,
+                xlsx_path=self.repo_root / "testing.xlsx",
+                llm_payload={"response": {"titles": {"slide1_title": "Titulo"}}},
+            )
+
+        self.assertEqual(captured["pptx_path"], self.repo_root / "teste-design.gerado.updated.pptx")
+        self.assertEqual(captured["generate_images_dir"], self.repo_root)
+        self.assertEqual(captured["update_images_dir"], self.repo_root)
+        self.assertEqual(captured["output_path"], self.repo_root / "presentation.updated.pptx")
+        self.assertEqual(result.output_path, Path("presentation.updated.pptx"))
 
     def test_load_job_config_rejects_non_object_json(self):
         with tempfile.TemporaryDirectory() as td:
@@ -659,7 +676,7 @@ class TestPresentationBuilder(unittest.TestCase):
                 xlsx_bytes=b"",
             )
 
-    def test_build_presentation_from_bytes_uses_api_output_filename(self):
+    def test_build_presentation_from_bytes_uses_fixed_safe_fallback_filename(self):
         cfg = dict(self.cfg)
         cfg["api_output_filename"] = "nested/empresa-final.pptx"
 
@@ -676,6 +693,7 @@ class TestPresentationBuilder(unittest.TestCase):
             self.assertEqual(repo_root, self.repo_root)
             self.assertEqual(cfg["api_output_filename"], "nested/empresa-final.pptx")
             self.assertEqual(xlsx_path.read_bytes(), b"xlsx-bytes")
+            self.assertEqual(output_path.name, "presentation.updated.pptx")
             self.assertEqual(images_dir.name, "images")
             self.assertEqual(llm_payload, {"response": {"titles": {"slide1_title": "Titulo"}}})
             self.assertFalse(skip_charts)
@@ -703,7 +721,7 @@ class TestPresentationBuilder(unittest.TestCase):
             )
 
         self.assertEqual(pptx_bytes, b"pptx-bytes")
-        self.assertEqual(result.output_path, Path("empresa-final.pptx"))
+        self.assertEqual(result.output_path, Path("presentation.updated.pptx"))
         self.assertEqual(result.replaced_pictures, 2)
         self.assertEqual(result.replaced_placeholders, 1)
         self.assertEqual(result.replaced_text, 3)

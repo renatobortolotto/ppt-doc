@@ -78,12 +78,13 @@ def _safe_attachment_filename(filename: str | Path | None) -> str:
 def serialize_build_response(*, pptx_bytes: bytes, filename: str, result: Any) -> Dict[str, Any]:
     chart_failures = getattr(result, "chart_failures", ())
     text_field_failures = getattr(result, "text_field_failures", ())
+    safe_filename = escape(str(filename), quote=True)
     payload = {
-        "filename": escape(str(filename), quote=True),
+        "filename": safe_filename,
         "contentType": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "pptxBase64": base64.b64encode(pptx_bytes).decode("ascii"),
         "summary": {
-            "outputPath": escape(str(result.output_path), quote=True),
+            "outputPath": safe_filename,
             "replacedPictures": result.replaced_pictures,
             "replacedPlaceholders": result.replaced_placeholders,
             "replacedText": result.replaced_text,

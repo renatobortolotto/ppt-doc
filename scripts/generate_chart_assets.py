@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from presentation_builder import generate_chart_assets, resolve_path
+from presentation_builder import _resolve_project_path, generate_chart_assets
 from run_fixed_job import _configure_logging, _load_job_config, _parse_only_slides
 
 
@@ -70,7 +70,7 @@ def _resolve_output_dir(repo_root: Path, cfg: dict[str, object], raw_output_dir:
     if raw_output_dir:
         return Path(raw_output_dir).expanduser().resolve()
     images_dir = str(cfg.get("images_dir", "."))
-    return resolve_path(repo_root, images_dir)
+    return _resolve_project_path(repo_root, images_dir)
 
 
 def _build_summary(*, xlsx_path: Path, output_dir: Path, result) -> dict[str, object]:

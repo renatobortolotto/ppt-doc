@@ -81,7 +81,11 @@ class BuildPresentationResult:
     applied_text_keys: tuple[str, ...]
 
 
-def resolve_path(repo_root: Path, path_value: str) -> Path:
+def resolve_path(repo_root: Path, path_value: str) -> str:
+    return html.escape(str(_resolve_project_path(repo_root, path_value)), quote=True)
+
+
+def _resolve_project_path(repo_root: Path, path_value: str) -> Path:
     raw_path_value = str(path_value).strip()
     safe_path_value = html.escape(raw_path_value, quote=True)
     if safe_path_value != raw_path_value:
@@ -100,10 +104,10 @@ def resolve_path(repo_root: Path, path_value: str) -> Path:
     safe_repo_root = repo_root.expanduser().resolve()
     resolved_path = (safe_repo_root / safe_path_value).resolve()
     try:
-        safe_relative_path = resolved_path.relative_to(safe_repo_root)
+        resolved_path.relative_to(safe_repo_root)
     except ValueError as exc:
         raise ValueError("Caminho configurado deve ficar dentro do projeto") from exc
-    return (safe_repo_root / html.escape(str(safe_relative_path), quote=True)).resolve()
+    return resolved_path
 
 
 def extract_period_token(filename: str | Path | None) -> str | None:
@@ -168,7 +172,7 @@ def load_llm_payload_from_path(repo_root: Path, cfg: Mapping[str, Any]) -> objec
     if not llm_path:
         return None
 
-    path = resolve_path(repo_root, str(llm_path))
+    path = _resolve_project_path(repo_root, str(llm_path))
     if not path.exists():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
@@ -202,7 +206,7 @@ def _load_text_fields_config(
     repo_root: Path,
     cfg: Mapping[str, Any],
 ) -> tuple[Path, str | None, Sequence[object]]:
-    text_fields_config = resolve_path(
+    text_fields_config = _resolve_project_path(
         repo_root,
         str(cfg.get("text_fields_config", "config/text_fields.json")),
     )
@@ -545,16 +549,16 @@ def build_presentation(
     if normalized_only_slides and skip_charts:
         raise ValueError("only_slides nao pode ser usado junto com skip_charts")
 
-    configured_output_path = resolve_path(repo_root, str(cfg.get("pptx_output") or "presentation.updated.pptx"))
+    configured_output_path = _resolve_project_path(repo_root, str(cfg.get("pptx_output") or "presentation.updated.pptx"))
     effective_output_path = output_path or configured_output_path.with_name(
         output_filename_for_xlsx(
             xlsx_path.name,
             fallback_filename=configured_output_path.name,
         )
     )
-    effective_images_dir = images_dir or resolve_path(repo_root, str(cfg.get("images_dir", ".")))
+    effective_images_dir = images_dir or _resolve_project_path(repo_root, str(cfg.get("images_dir", ".")))
 
-    pptx_template = resolve_path(repo_root, str(cfg.get("pptx_template")))
+    pptx_template = _resolve_project_path(repo_root, str(cfg.get("pptx_template")))
     allow_placeholder_text = bool(cfg.get("allow_placeholder_text", False))
     effective_llm_payload = llm_payload if llm_payload is not None else load_llm_payload_from_path(repo_root, cfg)
     _text_fields_config_path, _default_sheet, text_specs = _load_text_fields_config(
@@ -615,7 +619,7 @@ def build_presentation(
         )
 
     return BuildPresentationResult(
-        output_path=effective_output_path,
+        output_path=Path(_safe_output_filename(effective_output_path.name)),
         replaced_pictures=replaced_pictures,
         replaced_placeholders=replaced_placeholders,
         replaced_text=replaced_text,

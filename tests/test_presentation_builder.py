@@ -24,6 +24,7 @@ from presentation_builder import (
     load_llm_mapping_from_payload,
     output_filename_for_xlsx,
     resolve_path,
+    _resolve_project_path,
     _chart_generators,
     _persist_generated_chart_files,
     _select_chart_generators,
@@ -562,12 +563,14 @@ class TestPresentationBuilder(unittest.TestCase):
         self.assertNotIn("<svg", rendered)
 
     def test_resolve_path_supports_relative_and_rejects_absolute_inputs(self):
-        relative = resolve_path(self.repo_root, "config/job_config.json")
+        relative = _resolve_project_path(self.repo_root, "config/job_config.json")
+        rendered_relative = resolve_path(self.repo_root, "config/job_config.json")
         absolute_input = Path("/tmp/ppt-doc-absolute.json")
 
         self.assertEqual(relative, (self.repo_root / "config" / "job_config.json").resolve())
+        self.assertEqual(rendered_relative, html.escape(str(relative), quote=True))
         with self.assertRaisesRegex(ValueError, "relativo ao projeto"):
-            resolve_path(self.repo_root, str(absolute_input))
+            _resolve_project_path(self.repo_root, str(absolute_input))
 
     def test_resolve_path_rejects_html_sensitive_input(self):
         payloads = (
@@ -581,7 +584,7 @@ class TestPresentationBuilder(unittest.TestCase):
         for payload in payloads:
             raw_path = f"reports/{payload}.pptx"
             with self.assertRaisesRegex(ValueError, "caracteres invalidos"):
-                resolve_path(self.repo_root, raw_path)
+                _resolve_project_path(self.repo_root, raw_path)
 
     def test_resolve_path_rejects_path_traversal(self):
         unsafe_paths = (
@@ -594,7 +597,7 @@ class TestPresentationBuilder(unittest.TestCase):
 
         for raw_path in unsafe_paths:
             with self.assertRaisesRegex(ValueError, "Caminho configurado"):
-                resolve_path(self.repo_root, raw_path)
+                _resolve_project_path(self.repo_root, raw_path)
 
     def test_load_job_config_rejects_non_object_json(self):
         with tempfile.TemporaryDirectory() as td:

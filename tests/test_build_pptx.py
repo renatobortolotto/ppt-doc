@@ -93,7 +93,11 @@ class TestBuildPptxApplication(unittest.TestCase):
 
         with (
             patch.object(build_pptx, "_repo_root", return_value=Path("/repo")) as root_mock,
-            patch.object(build_pptx, "load_job_config", return_value={"cfg": True}) as cfg_mock,
+            patch.object(
+                build_pptx,
+                "load_job_config",
+                return_value={"pptx_output": "relatorio.pptx"},
+            ) as cfg_mock,
             patch.object(
                 build_pptx,
                 "build_presentation_from_bytes",
@@ -110,7 +114,7 @@ class TestBuildPptxApplication(unittest.TestCase):
         cfg_mock.assert_called_once_with(Path("/repo"))
         build_mock.assert_called_once_with(
             repo_root=Path("/repo"),
-            cfg={"cfg": True},
+            cfg={"pptx_output": "relatorio.pptx"},
             xlsx_bytes=b"xlsx-bytes",
             xlsx_filename="entrada.xlsx",
             llm_payload={"response": {"title": "ok"}},
@@ -193,6 +197,34 @@ class TestBuildPptxApplication(unittest.TestCase):
         self.assertIn("&#x27; onmouseover=&#x27;alert(1)", rendered_body)
         self.assertIn("&lt;/script&gt;&lt;script&gt;alert(1)&lt;/script&gt;", rendered_body)
         self.assertIn("&lt;svg/onload=alert(1)&gt;", rendered_body)
+
+    def test_compose_presentation_from_inputs_does_not_reflect_result_output_path(self):
+        malicious_output_path = "<script>alert('output-path')</script>"
+        fake_result = types.SimpleNamespace(
+            output_path=malicious_output_path,
+            replaced_pictures=1,
+            replaced_placeholders=2,
+            replaced_text=3,
+            generated_chart_count=4,
+            chart_failures=(),
+            text_field_failures=(),
+            applied_text_keys=(),
+        )
+
+        with patch.object(
+            build_pptx,
+            "_build_presentation_artifact",
+            return_value=(b"pptx-bytes", "safe-output.pptx", fake_result),
+        ):
+            body = build_pptx.compose_presentation_from_inputs(
+                b"xlsx-bytes",
+                b'{"response":{}}',
+            )
+
+        rendered_body = json.dumps(body, ensure_ascii=False)
+        self.assertNotIn(malicious_output_path, rendered_body)
+        self.assertEqual(body["filename"], "safe-output.pptx")
+        self.assertEqual(body["summary"]["outputPath"], "safe-output.pptx")
 
     def test_compose_presentation_download_response_returns_binary_file_response(self):
         fake_result = self._fake_build_result("download.pptx")

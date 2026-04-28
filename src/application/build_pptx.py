@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Mapping, Tuple
 
-from presentation_builder import build_presentation_from_bytes, load_job_config
+from presentation_builder import build_presentation_from_bytes, load_job_config, output_filename_for_xlsx
 from src.application.response_safety import (
     build_error_response,
     build_file_response,
@@ -49,7 +49,13 @@ def _build_presentation_artifact(
         xlsx_filename=xlsx_filename,
         llm_payload=llm_payload,
     )
-    filename = result.output_path.name
+    fallback_filename = str(
+        cfg.get("api_output_filename") or cfg.get("pptx_output") or "presentation.updated.pptx"
+    )
+    filename = output_filename_for_xlsx(
+        xlsx_filename,
+        fallback_filename=fallback_filename,
+    )
     return pptx_bytes, filename, result
 
 

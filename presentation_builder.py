@@ -107,7 +107,7 @@ def _resolve_project_path(repo_root: Path, path_value: str) -> Path:
         resolved_path.relative_to(safe_repo_root)
     except ValueError as exc:
         raise ValueError("Caminho configurado deve ficar dentro do projeto") from exc
-    return resolved_path
+    return (safe_repo_root / html.escape(str(resolved_path.relative_to(safe_repo_root)), quote=True)).resolve()
 
 
 def extract_period_token(filename: str | Path | None) -> str | None:
